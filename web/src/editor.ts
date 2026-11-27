@@ -6,14 +6,36 @@ import {
   sceneConnections,
   setupConnections,
 } from "./connections.js";
-import { button, el, get } from "./dom.js";
+import { button, el, get, pointerButton, pressedPointerButton } from "./dom.js";
 import { createSceneWriteQueue, setupSceneActions, type QueueSceneWrite } from "./scene-actions.js";
 import { decode, Workspace, type Scene, type Point } from "./model.js";
+import {
+  gbcViewportTiles,
+  maxSceneTilesPerAxis,
+  minSceneTilesPerAxis,
+  pixelsPerTile,
+} from "./project-constants.js";
 import { gbcSpriteLimits, sceneMetrics } from "./scene-metrics.js";
 
 const launcherPreference = "cartquilt.showLauncher";
 const recentProjectsKey = "cartquilt.recentProjects";
 const recentProjectLimit = 8;
+const serviceHealthTimeoutMs = 3_000;
+const serviceHealthIntervalMs = 15_000;
+const httpStatus = { noContent: 204, notFound: 404 } as const;
+const worldMap = {
+  zoomStep: 1.2,
+  minZoom: 0.1,
+  maxZoom: 4,
+  minFitZoom: 0.01,
+  maxFitZoom: 1.25,
+  fitPaddingPx: 18,
+  maxWheelDelta: 200,
+  wheelZoomRate: 0.003,
+  dragThresholdPx: 3,
+  keyboardPanPx: 24,
+  keyboardSceneMovePx: 8,
+} as const;
 
 type RecentProject = { name: string; path: string };
 
@@ -82,7 +104,7 @@ function monitorService() {
       const response = await fetch("/api/project", {
         method: "HEAD",
         cache: "no-store",
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(serviceHealthTimeoutMs),
       });
       live = response.ok;
     } catch {
@@ -96,7 +118,7 @@ function monitorService() {
     if (label && label.textContent !== message) label.textContent = message;
   }
   void check();
-  window.setInterval(check, 15_000);
+  window.setInterval(check, serviceHealthIntervalMs);
   document.addEventListener("visibilitychange", check);
 }
 
@@ -137,7 +159,7 @@ function setupProjectDialog() {
         signal: controller.signal,
       });
       if (!response.ok) throw Error((await response.text()).trim());
-      if (response.status !== 204) {
+      if (response.status !== httpStatus.noContent) {
         const selected: { path: string } = await response.json();
         if (controller.signal.aborted) return;
         if (mode === "open") {
@@ -349,6 +371,14 @@ function setupSceneCreation(
   const submit = get<HTMLButtonElement>("create-scene");
   const cancel = get<HTMLButtonElement>("cancel-new-scene");
   const refresh = get<HTMLButtonElement>("refresh-scene-list");
+  for (const [input, defaultTiles] of [
+    [width, gbcViewportTiles.width],
+    [height, gbcViewportTiles.height],
+  ] as const) {
+    input.min = String(minSceneTilesPerAxis);
+    input.max = String(maxSceneTilesPerAxis);
+    input.defaultValue = String(defaultTiles);
+  }
   const message = get("new-scene-status");
   function busy(value: boolean) {
     name.disabled =
@@ -438,11 +468,11 @@ async function start() {
     return;
   }
   const response = await fetch("./api/project");
-  if (response.status === 204) {
+  if (response.status === httpStatus.noContent) {
     showLauncher();
     return;
   }
-  if (response.status === 404) {
+  if (response.status === httpStatus.notFound) {
     showLauncher("Choose Open project to reopen the saved folder.");
     return;
   }
@@ -608,10 +638,10 @@ async function start() {
         sprite.setAttribute("aria-label", a.name);
         pressed(sprite, w.objects.get(s.id) === a.id);
       }
-      sprite.style.left = `${(a.x / (s.width * 8)) * 100}%`;
-      sprite.style.top = `${(a.y / (s.height * 8)) * 100}%`;
-      sprite.style.width = `${(a.width / (s.width * 8)) * 100}%`;
-      sprite.style.height = `${(a.height / (s.height * 8)) * 100}%`;
+      sprite.style.left = `${(a.x / (s.width * pixelsPerTile)) * 100}%`;
+      sprite.style.top = `${(a.y / (s.height * pixelsPerTile)) * 100}%`;
+      sprite.style.width = `${(a.width / (s.width * pixelsPerTile)) * 100}%`;
+      sprite.style.height = `${(a.height / (s.height * pixelsPerTile)) * 100}%`;
       sprite.append(img(a.sprite));
       art.append(sprite);
     }
@@ -737,8 +767,8 @@ async function start() {
       updateSceneTools();
     } else {
       crumb.textContent = "World desk";
-      const out = button("−", () => zoom(1 / 1.2)),
-        plus = button("+", () => zoom(1.2));
+      const out = button("−", () => zoom(1 / worldMap.zoomStep)),
+        plus = button("+", () => zoom(worldMap.zoomStep));
       out.setAttribute("aria-label", "Zoom out");
       plus.setAttribute("aria-label", "Zoom in");
       const percentage = el("span");
@@ -780,7 +810,7 @@ async function start() {
         input.min = "0";
         input.step = "1";
         const extent = axis === "x" ? "width" : "height";
-        input.max = String(s[extent] * 8 - a[extent]);
+        input.max = String(s[extent] * pixelsPerTile - a[extent]);
         input.value = String(a[axis]);
         let group = Symbol();
         input.onfocus = () => {
@@ -959,7 +989,7 @@ async function start() {
   }
   function zoom(factor: number, x = canvas.clientWidth / 2, y = canvas.clientHeight / 2) {
     const c = w.camera,
-      next = Math.min(4, Math.max(0.1, c.zoom * factor));
+      next = Math.min(worldMap.maxZoom, Math.max(worldMap.minZoom, c.zoom * factor));
     c.x = x - ((x - c.x) * next) / c.zoom;
     c.y = y - ((y - c.y) * next) / c.zoom;
     c.zoom = next;
@@ -976,8 +1006,12 @@ async function start() {
     const width = Math.max(...bounds.map((b) => b.right)) - l,
       height = Math.max(...bounds.map((b) => b.bottom)) - t;
     const z = Math.max(
-      0.01,
-      Math.min(1.25, (canvas.clientWidth - 36) / width, (canvas.clientHeight - 36) / height),
+      worldMap.minFitZoom,
+      Math.min(
+        worldMap.maxFitZoom,
+        (canvas.clientWidth - 2 * worldMap.fitPaddingPx) / width,
+        (canvas.clientHeight - 2 * worldMap.fitPaddingPx) / height,
+      ),
     );
     w.camera = {
       x: (canvas.clientWidth - width * z) / 2 - l * z,
@@ -1055,14 +1089,14 @@ async function start() {
       tooltip.setAttribute("role", "tooltip");
       const gbc = metrics.gbc;
       const rows = [
-        `Size ${s.width}×${s.height} tiles (${s.width * 8}×${s.height * 8} pixels)`,
+        `Size ${s.width}×${s.height} tiles (${s.width * pixelsPerTile}×${s.height * pixelsPerTile} pixels)`,
         `Actors ${metrics.actors} · Triggers ${metrics.triggers}`,
         `Entrances ${s.entrances.length}`,
         `Estimated sprite tiles ${metrics.spriteTiles}`,
       ];
       if (gbc) {
         rows.push(
-          `GBC estimates in 8×8 sprite mode`,
+          `GBC estimates in ${pixelsPerTile}×${pixelsPerTile} sprite mode`,
           `${gbc.hardwareSprites}/${gbcSpriteLimits.onscreen} hardware sprites · ${gbc.peakScanline}/${gbcSpriteLimits.perScanline} on the busiest scanline`,
         );
       }
@@ -1125,8 +1159,8 @@ async function start() {
     }
   }
   canvas.onpointerdown = (e) => {
-    const middlePan = e.pointerType === "mouse" && e.button === 1;
-    if (sceneMode() || drag || (e.button !== 0 && !middlePan)) return;
+    const middlePan = e.pointerType === "mouse" && e.button === pointerButton.middle;
+    if (sceneMode() || drag || (e.button !== pointerButton.primary && !middlePan)) return;
     const target = e.target as Element;
     if (!middlePan && target.closest(".world-connection")) return;
     const card = middlePan ? null : target.closest<HTMLElement>(".card");
@@ -1134,7 +1168,7 @@ async function start() {
     const id = card?.dataset.id;
     drag = {
       pointer: e.pointerId,
-      buttons: middlePan ? 4 : 1,
+      buttons: middlePan ? pressedPointerButton.middle : pressedPointerButton.primary,
       owner: card ?? canvas,
       start: { x: e.clientX, y: e.clientY },
       origin: { ...(id ? w.positionFor(id) : w.camera) },
@@ -1155,7 +1189,7 @@ async function start() {
     }
     const dx = e.clientX - drag.start.x,
       dy = e.clientY - drag.start.y;
-    if (!drag.moved && Math.hypot(dx, dy) < 3) return;
+    if (!drag.moved && Math.hypot(dx, dy) < worldMap.dragThresholdPx) return;
     if (!drag.moved && drag.card) selectScene(drag.card);
     drag.moved = true;
     if (drag.card) {
@@ -1180,7 +1214,7 @@ async function start() {
     });
   }
   canvas.addEventListener("auxclick", (event) => {
-    if (!sceneMode() && event.button === 1) event.preventDefault();
+    if (!sceneMode() && event.button === pointerButton.middle) event.preventDefault();
   });
   canvas.addEventListener(
     "wheel",
@@ -1189,7 +1223,10 @@ async function start() {
       e.preventDefault();
       const r = canvas.getBoundingClientRect();
       zoom(
-        Math.exp(-Math.max(-200, Math.min(200, e.deltaY)) * 0.003),
+        Math.exp(
+          -Math.max(-worldMap.maxWheelDelta, Math.min(worldMap.maxWheelDelta, e.deltaY)) *
+            worldMap.wheelZoomRate,
+        ),
         e.clientX - r.left,
         e.clientY - r.top,
       );
@@ -1215,18 +1252,18 @@ async function start() {
       const d = step[e.key];
       if (card && e.shiftKey) {
         const p = w.positionFor(card);
-        p.x += 8 * d.x;
-        p.y += 8 * d.y;
+        p.x += worldMap.keyboardSceneMovePx * d.x;
+        p.y += worldMap.keyboardSceneMovePx * d.y;
         selectScene(card);
         savePosition(card);
       } else {
-        w.camera.x += 24 * d.x;
-        w.camera.y += 24 * d.y;
+        w.camera.x += worldMap.keyboardPanPx * d.x;
+        w.camera.y += worldMap.keyboardPanPx * d.y;
       }
       positionCards();
     } else if (["+", "=", "-"].includes(e.key)) {
       e.preventDefault();
-      zoom(e.key === "-" ? 1 / 1.2 : 1.2);
+      zoom(e.key === "-" ? 1 / worldMap.zoomStep : worldMap.zoomStep);
     } else if (e.key.toLowerCase() === "f") fit();
   };
   document.addEventListener("keydown", (e) => {

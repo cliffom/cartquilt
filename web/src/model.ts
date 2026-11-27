@@ -1,3 +1,10 @@
+import {
+  maxSceneTilesPerAxis,
+  minSceneTilesPerAxis,
+  pixelsPerTile,
+  projectVersion,
+} from "./project-constants.js";
+
 export type Point = { x: number; y: number };
 export type Actor = Point & {
   id: string;
@@ -24,7 +31,7 @@ export type Scene = {
   entrances: Entrance[];
   exits: Exit[];
 };
-export type Project = { version: 1; id: string; name: string; scenes: Scene[] };
+export type Project = { version: typeof projectVersion; id: string; name: string; scenes: Scene[] };
 export type Snapshot = { project: Project; revision: string };
 
 function record(value: unknown): Record<string, unknown> {
@@ -61,22 +68,22 @@ const sceneColor = /^#[0-9a-f]{6}$/i;
 export function decode(value: unknown): Snapshot {
   const snapshot = record(value),
     p = record(snapshot.project);
-  if (p.version !== 1) throw Error("Unsupported project version");
+  if (p.version !== projectVersion) throw Error("Unsupported project version");
   const scenes = items(p.scenes, (s) => {
-    const width = integer(s.width, 1, 1024),
-      height = integer(s.height, 1, 1024),
+    const width = integer(s.width, minSceneTilesPerAxis, maxSceneTilesPerAxis),
+      height = integer(s.height, minSceneTilesPerAxis, maxSceneTilesPerAxis),
       world = record(s.world);
     const actors = items(s.actors, (a) => {
-      const w = integer(a.width, 1, width * 8),
-        h = integer(a.height, 1, height * 8);
+      const w = integer(a.width, 1, width * pixelsPerTile),
+        h = integer(a.height, 1, height * pixelsPerTile);
       return {
         id: str(a.id, id),
         name: str(a.name),
         width: w,
         height: h,
         sprite: str(a.sprite, asset),
-        x: integer(a.x, 0, width * 8 - w),
-        y: integer(a.y, 0, height * 8 - h),
+        x: integer(a.x, 0, width * pixelsPerTile - w),
+        y: integer(a.y, 0, height * pixelsPerTile - h),
       };
     });
     return {
@@ -125,7 +132,7 @@ export function decode(value: unknown): Snapshot {
   }
   return {
     revision: str(snapshot.revision, /^[0-9a-f]{64}$/),
-    project: { version: 1, id: str(p.id, id), name: str(p.name), scenes },
+    project: { version: projectVersion, id: str(p.id, id), name: str(p.name), scenes },
   };
 }
 
@@ -170,7 +177,7 @@ export class SceneDocument {
     const actor = this.scene.actors.find((a) => a.id === op.actor);
     if (!actor) throw Error("Unknown actor");
     const extent = op.axis === "x" ? "width" : "height";
-    const max = this.scene[extent] * 8 - actor[extent];
+    const max = this.scene[extent] * pixelsPerTile - actor[extent];
     if (!Number.isInteger(op.value) || op.value < 0 || op.value > max)
       throw Error(`Enter a whole number from 0 to ${max}.`);
     if (actor[op.axis] === op.value) return;

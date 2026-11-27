@@ -1,3 +1,7 @@
+export const pointerButton = { primary: 0, middle: 1 } as const;
+export const pressedPointerButton = { primary: 1, middle: 4 } as const;
+const contextMenuViewportInsetPx = 8;
+
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = "") {
   const node = document.createElement(tag);
   node.className = cls;
@@ -35,6 +39,6 @@ export function tileAt(
 
 export function positionContextMenu(menu: HTMLElement, x: number, y: number) {
   menu.hidden = false;
-  menu.style.left = `${Math.max(8, Math.min(x, innerWidth - menu.offsetWidth - 8))}px`;
-  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - menu.offsetHeight - 8))}px`;
+  menu.style.left = `${Math.max(contextMenuViewportInsetPx, Math.min(x, innerWidth - menu.offsetWidth - contextMenuViewportInsetPx))}px`;
+  menu.style.top = `${Math.max(contextMenuViewportInsetPx, Math.min(y, innerHeight - menu.offsetHeight - contextMenuViewportInsetPx))}px`;
 }

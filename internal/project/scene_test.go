@@ -45,6 +45,26 @@ func TestSceneCreationAllowsOneWriterPerRevision(t *testing.T) {
 	}
 }
 
+func TestSceneDimensionBoundaries(t *testing.T) {
+	saved, err := Create(CreateInput{Name: "Bounds", Path: filepath.Join(t.TempDir(), "world")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, size := range []Point{{X: 0, Y: minSceneTiles}, {X: minSceneTiles, Y: maxSceneTiles + 1}} {
+		_, err := AddScene(saved.Path, AddSceneInput{BaseRevision: saved.Revision, Name: "Invalid", Width: size.X, Height: size.Y})
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("invalid dimensions %+v: %v", size, err)
+		}
+	}
+	added, err := AddScene(saved.Path, AddSceneInput{BaseRevision: saved.Revision, Name: "Limit", Width: maxSceneTiles, Height: minSceneTiles})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scene := added.Project.Scenes[0]; scene.Width != maxSceneTiles || scene.Height != minSceneTiles {
+		t.Fatalf("unexpected saved dimensions: %d×%d", scene.Width, scene.Height)
+	}
+}
+
 func TestSceneActionsPersistUnderRevisionChecks(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "examples", "threadvale", "project.json"))
 	if err != nil {

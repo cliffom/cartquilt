@@ -20,14 +20,14 @@ func Open(input OpenInput) (Saved, error) {
 		return Saved{}, fmt.Errorf("open project: %w", err)
 	}
 	if info.IsDir() {
-		path = filepath.Join(path, "project.json")
+		path = filepath.Join(path, manifestFilename)
 		info, err = os.Stat(path)
 		if err != nil {
-			return Saved{}, fmt.Errorf("open project.json: %w", err)
+			return Saved{}, fmt.Errorf("open %s: %w", manifestFilename, err)
 		}
 	}
 	if !info.Mode().IsRegular() || filepath.Ext(path) != ".json" {
-		return Saved{}, fmt.Errorf("%w: choose a folder containing project.json or a saved JSON file", ErrInvalidInput)
+		return Saved{}, fmt.Errorf("%w: choose a folder containing %s or a saved JSON file", ErrInvalidInput, manifestFilename)
 	}
 	snapshot, err := Load(path)
 	if err != nil {

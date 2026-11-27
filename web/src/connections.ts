@@ -1,4 +1,11 @@
-import { el, get, positionContextMenu, tileAt } from "./dom.js";
+import {
+  el,
+  get,
+  pointerButton,
+  positionContextMenu,
+  pressedPointerButton,
+  tileAt,
+} from "./dom.js";
 import {
   decode,
   type Entrance,
@@ -9,6 +16,10 @@ import {
   type Workspace,
 } from "./model.js";
 import type { QueueSceneWrite } from "./scene-actions.js";
+
+const tileDragThresholdPx = 4;
+const worldArrowTipGapPx = 6;
+const worldArrowLaneSpacingPx = 8;
 
 type Kind = "entrance" | "exit";
 type TileArea = Point & Pick<Exit, "width" | "height">;
@@ -382,7 +393,7 @@ export function setupConnections(
     true,
   );
   canvas.addEventListener("pointerdown", (event) => {
-    if (drag || event.button !== 0 || !event.isPrimary) return;
+    if (drag || event.button !== pointerButton.primary || !event.isPrimary) return;
     suppressTileClick = false;
     pressedTile = undefined;
     const grid = gridForEvent(event);
@@ -424,13 +435,13 @@ export function setupConnections(
       clearDrag();
       return;
     }
-    if ((event.buttons & 1) === 0) {
+    if ((event.buttons & pressedPointerButton.primary) === 0) {
       clearDrag();
       return;
     }
     if (
       !drag.preview &&
-      Math.hypot(event.clientX - drag.origin.x, event.clientY - drag.origin.y) < 4
+      Math.hypot(event.clientX - drag.origin.x, event.clientY - drag.origin.y) < tileDragThresholdPx
     )
       return;
     const { scene } = drag;
@@ -444,7 +455,8 @@ export function setupConnections(
     if (drag?.pointerId !== event.pointerId) return;
     const current = drag;
     clearDrag();
-    if (event.button !== 0 || !current.preview || !current.art.isConnected) return;
+    if (event.button !== pointerButton.primary || !current.preview || !current.art.isConnected)
+      return;
     const { scene } = current;
     const area = selectedArea(event, current, scene);
     if (placing?.kind === "exit") {
@@ -686,10 +698,10 @@ export function positionWorldConnections(plane: HTMLElement, workspace: Workspac
         Math.abs((card.offsetHeight * distance) / (2 * dy)),
       );
     const beginning = inset(from);
-    const length = distance - beginning - inset(to) - 6;
+    const length = distance - beginning - inset(to) - worldArrowTipGapPx;
     edge.hidden = !Number.isFinite(length) || length <= 0;
     if (edge.hidden) continue;
-    const offset = Number(lane) * 8;
+    const offset = Number(lane) * worldArrowLaneSpacingPx;
     edge.style.left = `${start.x + from.offsetWidth / 2 + (dx * beginning - dy * offset) / distance}px`;
     edge.style.top = `${start.y + from.offsetHeight / 2 + (dy * beginning + dx * offset) / distance}px`;
     edge.style.width = `${length}px`;

@@ -31,8 +31,8 @@ type SceneResult struct {
 
 func AddScene(path string, input AddSceneInput) (SceneResult, error) {
 	name := strings.TrimSpace(input.Name)
-	if name == "" || input.Width < 1 || input.Width > 1024 || input.Height < 1 || input.Height > 1024 || input.BaseRevision == "" {
-		return SceneResult{}, fmt.Errorf("%w: enter a scene name and dimensions from 1 to 1024 tiles", ErrInvalidInput)
+	if name == "" || !validSceneDimensions(input.Width, input.Height) || input.BaseRevision == "" {
+		return SceneResult{}, fmt.Errorf("%w: enter a scene name and dimensions from %d to %d tiles", ErrInvalidInput, minSceneTiles, maxSceneTiles)
 	}
 
 	return writeScenes(path, input.BaseRevision, func(current Project, entries []json.RawMessage) ([]json.RawMessage, string, error) {
@@ -47,15 +47,15 @@ func AddScene(path string, input AddSceneInput) (SceneResult, error) {
 }
 
 func nextScenePosition(current Project) Point {
-	last := -280
+	last := -newSceneSpacing
 	for _, scene := range current.Scenes {
 		last = max(last, scene.World.X)
 	}
-	return Point{X: last + 280}
+	return Point{X: last + newSceneSpacing}
 }
 
 func newObjectID(kind string) string {
-	var id [16]byte
+	var id [objectIDBytes]byte
 	rand.Read(id[:])
 	return fmt.Sprintf("%s-%x", kind, id)
 }
@@ -67,7 +67,7 @@ func writeScenes(path, baseRevision string, edit func(Project, []json.RawMessage
 	}
 	dir := filepath.Dir(path)
 	// Keep the lock on a separate inode so it remains valid when the manifest is replaced.
-	lock := flock.New(filepath.Join(dir, "."+filepath.Base(path)+".lock"), flock.SetPermissions(0600))
+	lock := flock.New(filepath.Join(dir, "."+filepath.Base(path)+".lock"), flock.SetPermissions(privateFileMode))
 	defer lock.Close()
 	locked, err := lock.TryLock()
 	if err != nil {

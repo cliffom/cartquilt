@@ -210,3 +210,37 @@ test("legacy scenes decode with empty connections and linked exits resolve by st
   linked.project.scenes[1].entrances = [];
   assert.throws(() => decode(linked), /Invalid destination/);
 });
+
+test("scene and actor bounds match the saved project contract", () => {
+  const fixture = structuredClone(response);
+  const scene = fixture.project.scenes[0];
+  scene.width = 1024;
+  const actor = scene.actors[0];
+  actor.x = 1024 * 8 - actor.width;
+  const decoded = decode(fixture);
+  assert.equal(decoded.project.scenes[0].actors[0].x, actor.x);
+  actor.x++;
+  assert.throws(() => decode(fixture), /Invalid coordinate or dimension/);
+  actor.x--;
+  scene.width++;
+  assert.throws(() => decode(fixture), /Invalid coordinate or dimension/);
+});
+
+test("a saved entrance survives undo and redo of an actor draft", () => {
+  const workspace = new Workspace(decode(response));
+  const doc = workspace.active;
+  const originalX = doc.scene.actors[0].x;
+  doc.apply({ type: "moveActor", actor: "courier", axis: "x", value: originalX + 1 });
+
+  const updated = structuredClone(response);
+  const entrance = { id: "west-gate", name: "West gate", x: 2, y: 3 };
+  updated.project.scenes[0].entrances = [entrance];
+  workspace.acceptSceneAction(decode(updated), doc.scene.id, "connection");
+  assert.equal(doc.dirty, true);
+  doc.undo();
+  assert.equal(doc.dirty, false);
+  assert.deepEqual(doc.scene.entrances, [entrance]);
+  doc.redo();
+  assert.equal(doc.scene.actors[0].x, originalX + 1);
+  assert.deepEqual(doc.scene.entrances, [entrance]);
+});

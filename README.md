@@ -61,6 +61,13 @@ Relink or remove incoming exits before deleting their destination entrance or sc
 
 For local development, run `npm run dev` from the repository root and open [the Vite editor](http://127.0.0.1:5173). It starts Air and Vite in the same terminal. Press Ctrl+C to stop both. The first run downloads the pinned Air version and may fetch its Go toolchain.
 
+### Tests
+
+Keep project validation and persistence tests with their Go packages. Use TypeScript tests for decoder, workspace, and undo behavior. Use Playwright for workflows that need the browser and service together.
+
+- `npm run check` builds the editor and runs formatting, linting, Go tests, and TypeScript tests. Run `npm run test:go` or `npm run test:ts` for a narrower pass. The TypeScript suite uses Go to capture an actual HTTP response for the shared contract tests.
+- Run `npx playwright install chromium` once, then `npm run test:e2e` for browser flows. The suite starts Cartquilt on an available loopback port and uses disposable project folders. Pull request checks run `npm run check` and the browser suite. Failed browser traces are saved under `.local/playwright-results/` locally.
+
 Air rebuilds and restarts Go on source changes behind the same Vite address. A successful Go rebuild leaves the page open. Reopen a project from **Recent projects** if refreshing after a rebuild invalidates its session URL. CSS updates in place, and TypeScript or HTML changes reload the page and clear tab-only edits.
 
 Pass `npm run dev -- -project examples/threadvale/project.json` to start with the sample. Set `CARTQUILT_SERVICE_PORT` when running `npm run dev` to use an existing Go service with its own lifecycle.

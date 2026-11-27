@@ -35,9 +35,8 @@ func ApplySceneAction(path, id string, input SceneActionInput) (SceneResult, err
 			return SceneResult{}, fmt.Errorf("%w: choose a six-digit hex color", ErrInvalidInput)
 		}
 	case "position":
-		const maxCoordinate = 1<<53 - 1
-		if input.World == nil || int64(input.World.X) < -maxCoordinate || int64(input.World.X) > maxCoordinate ||
-			int64(input.World.Y) < -maxCoordinate || int64(input.World.Y) > maxCoordinate {
+		if input.World == nil || int64(input.World.X) < -maxBrowserInteger || int64(input.World.X) > maxBrowserInteger ||
+			int64(input.World.Y) < -maxBrowserInteger || int64(input.World.Y) > maxBrowserInteger {
 			return SceneResult{}, fmt.Errorf("%w: enter a valid world position", ErrInvalidInput)
 		}
 	case "duplicate", "delete":

@@ -7,7 +7,10 @@
     "start": "npm run build && go run ./cmd/cartquilt",
     "dev": "node scripts/dev.mjs",
     "serve": "go run ./cmd/cartquilt",
-    "test": "npm run build && tsc && go test ./... && node --test tests/*.test.mjs",
+    "test": "npm run build && npm run test:go && npm run test:ts",
+    "test:go": "go test ./...",
+    "test:ts": "tsc && node --test tests/*.test.mjs",
+    "test:e2e": "npm run build && go build -o .local/cartquilt-e2e.exe ./cmd/cartquilt && playwright test --config tests/playwright.config.mjs",
     "format": "gofmt -w cmd internal && biome format --write",
     "format:check": "node scripts/check-go-format.mjs && biome format",
     "lint": "go vet ./... && biome lint --error-on-warnings && tsc --noEmit",
@@ -15,6 +18,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.6",
+    "@playwright/test": "1.64.1",
     "typescript": "5.9.3",
     "vite": "8.4.0"
   },

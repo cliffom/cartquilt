@@ -1,7 +1,6 @@
 package project
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,18 +34,16 @@ func Create(input CreateInput) (Saved, error) {
 	}
 
 	dir := filepath.Clean(input.Path)
-	if err := os.Mkdir(dir, 0700); err != nil {
+	if err := os.Mkdir(dir, privateFolderMode); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return Saved{}, fmt.Errorf("%w: %s", ErrExists, dir)
 		}
 		return Saved{}, fmt.Errorf("create project folder (its parent must exist): %w", err)
 	}
 
-	var id [16]byte
-	rand.Read(id[:])
 	result, err := saveNewProject(dir, Project{
-		Version: 1,
-		ID:      fmt.Sprintf("project-%x", id),
+		Version: projectVersion,
+		ID:      newObjectID("project"),
 		Name:    name,
 		Scenes:  []Scene{},
 	})
@@ -66,12 +63,12 @@ func saveNewProject(dir string, project Project) (Saved, error) {
 	if err != nil {
 		return Saved{}, err
 	}
-	temp, err := writeCandidate(dir, data, 0600)
+	temp, err := writeCandidate(dir, data, privateFileMode)
 	if err != nil {
 		return Saved{}, err
 	}
 	defer os.Remove(temp)
-	path := filepath.Join(dir, "project.json")
+	path := filepath.Join(dir, manifestFilename)
 	// Publish a complete file without replacing any file already at the destination.
 	if err := os.Link(temp, path); err != nil {
 		return Saved{}, err

@@ -20,9 +20,14 @@ import (
 
 var projectSlugSeparators = regexp.MustCompile(`[^a-z0-9]+`)
 
+const (
+	maxProjectSlugLength  = 64
+	maxProjectRequestSize = 32 * 1024
+)
+
 func projectSlug(name string) string {
 	slug := strings.Trim(projectSlugSeparators.ReplaceAllString(strings.ToLower(name), "-"), "-")
-	slug = strings.TrimRight(slug[:min(len(slug), 64)], "-")
+	slug = strings.TrimRight(slug[:min(len(slug), maxProjectSlugLength)], "-")
 	if slug == "" {
 		return "project"
 	}
@@ -147,7 +152,7 @@ func decodeLocalRequest(w http.ResponseWriter, r *http.Request, input any) bool 
 		http.Error(w, "Project requests require JSON", http.StatusUnsupportedMediaType)
 		return false
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32*1024))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxProjectRequestSize))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(input); err != nil || decoder.Decode(new(any)) != io.EOF {
 		http.Error(w, "Invalid project request", http.StatusBadRequest)

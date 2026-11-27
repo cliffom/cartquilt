@@ -60,18 +60,22 @@ func decodeSnapshot(data []byte) (Snapshot, error) {
 	if err := json.Unmarshal(data, &p); err != nil {
 		return Snapshot{}, err
 	}
-	if p.Version != 1 || !idPattern.MatchString(p.ID) || p.Name == "" || p.Scenes == nil {
+	if p.Version != projectVersion || !idPattern.MatchString(p.ID) || p.Name == "" || p.Scenes == nil {
 		return Snapshot{}, fmt.Errorf("invalid project header")
 	}
 	ids := map[string]bool{}
 	for _, s := range p.Scenes {
-		if ids[s.ID] || !idPattern.MatchString(s.ID) || s.Name == "" || (s.Art != "" && !assetPattern.MatchString(s.Art)) || (s.Color != "" && !sceneColorPattern.MatchString(s.Color)) || s.Width < 1 || s.Height < 1 || s.Width > 1024 || s.Height > 1024 || s.Actors == nil {
+		if ids[s.ID] || !idPattern.MatchString(s.ID) || s.Name == "" ||
+			(s.Art != "" && !assetPattern.MatchString(s.Art)) || (s.Color != "" && !sceneColorPattern.MatchString(s.Color)) ||
+			!validSceneDimensions(s.Width, s.Height) || s.Actors == nil {
 			return Snapshot{}, fmt.Errorf("invalid scene %q", s.ID)
 		}
 		ids[s.ID] = true
 		actors := map[string]bool{}
 		for _, a := range s.Actors {
-			if actors[a.ID] || !idPattern.MatchString(a.ID) || a.Name == "" || !assetPattern.MatchString(a.Sprite) || a.Width < 1 || a.Height < 1 || a.X < 0 || a.Y < 0 || a.Width > s.Width*8-a.X || a.Height > s.Height*8-a.Y {
+			if actors[a.ID] || !idPattern.MatchString(a.ID) || a.Name == "" || !assetPattern.MatchString(a.Sprite) ||
+				a.Width < 1 || a.Height < 1 || a.X < 0 || a.Y < 0 ||
+				a.Width > s.Width*pixelsPerTile-a.X || a.Height > s.Height*pixelsPerTile-a.Y {
 				return Snapshot{}, fmt.Errorf("invalid actor %q in %s", a.ID, s.ID)
 			}
 			actors[a.ID] = true
