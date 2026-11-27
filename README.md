@@ -1,5 +1,9 @@
 # ![Cartquilt](docs/assets/cartquilt-hero.png)
 
+[![Pull request checks](https://github.com/cliffom/cartquilt/actions/workflows/pr-checks.yml/badge.svg?event=pull_request)](https://github.com/cliffom/cartquilt/actions/workflows/pr-checks.yml)
+[![Go version](https://img.shields.io/github/go-mod/go-version/cliffom/cartquilt)](go.mod)
+[![TypeScript version](https://img.shields.io/github/package-json/dependency-version/cliffom/cartquilt/dev/typescript)](package.json)
+
 Cartquilt is a local-first Game Boy Color world and scene editor designed for developers, creators, and coding agents. Arrange scenes on a world map, open one to move an actor, and see the change in its map thumbnail. The editor runs in your browser, with a Go service on your computer that reads the project and its artwork.
 
 ## Get started
