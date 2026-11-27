@@ -74,7 +74,7 @@
         </div>
       </form>
     </dialog>
-    <div id="scene-context-menu" role="menu" hidden>
+    <div id="scene-context-menu" class="scene-menu" role="menu" hidden>
       <div class="scene-color-chips" role="group" aria-label="Border color">
         <button type="button" role="menuitemradio" tabindex="-1" data-scene-color="" aria-checked="false" aria-label="Default border" title="Default border"></button>
         <button type="button" role="menuitemradio" tabindex="-1" data-scene-color="#d47478" aria-checked="false" aria-label="Rose border" title="Rose border"></button>
@@ -86,7 +86,13 @@
       </div>
       <button type="button" role="menuitem" tabindex="-1" value="rename">Rename…</button>
       <button type="button" role="menuitem" tabindex="-1" value="duplicate">Duplicate</button>
+      <button id="world-card-connections" type="button" role="menuitem" tabindex="-1" hidden>Connections…</button>
       <button type="button" role="menuitem" tabindex="-1" value="delete" class="scene-delete-menu">Delete…</button>
+    </div>
+    <div id="connection-menu" class="scene-menu" role="menu" aria-label="Scene connection actions" hidden>
+      <button id="add-entrance-here" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true">+</span> Entrance</button>
+      <button id="add-exit-here" type="button" role="menuitem" tabindex="-1"><span aria-hidden="true">+</span> Exit</button>
+      <div id="connection-removals" role="group" aria-label="Remove connections" hidden></div>
     </div>
     <dialog id="scene-action-dialog" aria-labelledby="scene-action-title" aria-describedby="scene-action-description">
       <form id="scene-action-form">
@@ -100,6 +106,33 @@
         <div class="dialog-actions">
           <button type="button" id="cancel-scene-action">Cancel</button>
           <button type="submit" id="apply-scene-action" class="primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="connection-dialog" aria-labelledby="connection-title">
+      <form id="connection-form" autocomplete="off">
+        <h2 id="connection-title"></h2>
+        <label for="connection-name">Name</label>
+        <input id="connection-name" autocomplete="off" data-1p-ignore required />
+        <div class="scene-dimensions">
+          <label for="connection-x">Tile X<input id="connection-x" type="number" min="0" required /></label>
+          <label for="connection-y">Tile Y<input id="connection-y" type="number" min="0" required /></label>
+        </div>
+        <div id="connection-exit-fields" hidden>
+          <div class="scene-dimensions">
+            <label for="connection-width">Width in tiles<input id="connection-width" type="number" min="1" required /></label>
+            <label for="connection-height">Height in tiles<input id="connection-height" type="number" min="1" required /></label>
+          </div>
+          <label for="destination-scene">Destination scene</label>
+          <span class="select-field"><select id="destination-scene" required></select></span>
+          <label for="destination-entrance">Destination entrance</label>
+          <span class="select-field"><select id="destination-entrance" required></select></span>
+        </div>
+        <div id="connection-status" role="status"></div>
+        <div class="dialog-actions">
+          <button id="remove-connection" type="button" hidden>Remove</button>
+          <button id="cancel-connection" type="button">Cancel</button>
+          <button id="save-connection" class="primary" type="submit">Save</button>
         </div>
       </form>
     </dialog>
@@ -147,13 +180,27 @@
             <h1 id="desk-title"></h1>
           </div>
           <div id="actions"></div>
+          <div id="scene-toolbar" class="scene-toolbar" role="group" aria-label="Scene tools" hidden>
+            <div class="scene-tool-group" role="group" aria-label="Placement">
+              <button id="place-entrance" type="button" aria-pressed="false"><span aria-hidden="true">+</span> Entrance</button>
+              <button id="place-exit" type="button" aria-pressed="false"><span aria-hidden="true">+</span> Exit</button>
+            </div>
+            <div class="scene-tool-group" role="group" aria-label="History">
+              <button id="undo-scene" class="scene-icon-button" type="button" aria-label="Undo" title="Undo" disabled>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4-4 4 4 4M3 8h9a4 4 0 0 1 0 8h-2" /></svg>
+              </button>
+              <button id="redo-scene" class="scene-icon-button" type="button" aria-label="Redo" title="Redo" disabled>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m13 4 4 4-4 4m4-4H8a4 4 0 0 0 0 8h2" /></svg>
+              </button>
+            </div>
+          </div>
         </div>
         <div id="panels">
           <button data-panel="navigator">Navigator</button
           ><button data-panel="inspector">Inspector</button>
         </div>
         <div id="canvas" tabindex="0" aria-label="World map canvas"><div id="plane"></div></div>
-        <div id="hints"></div>
+        <div id="hints" role="status"></div>
       </section>
       <aside id="inspector" aria-label="Inspector">
         <h2>Inspector</h2>

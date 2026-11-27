@@ -30,7 +30,7 @@ export function sceneMetrics(scene: Scene) {
   return {
     actors: scene.actors.length,
     spriteTiles: [...tilesBySprite.values()].reduce((sum, tiles) => sum + tiles, 0),
-    triggers: 0,
+    triggers: scene.exits.length,
     gbc: singleScreen
       ? {
           hardwareSprites,

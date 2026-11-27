@@ -187,3 +187,26 @@ test("accepting a position save keeps any newer drag and the actor draft", () =>
   assert.equal(workspace.active.dirty, false);
   assert.deepEqual(workspace.active.scene.world, { x: 24, y: -8 });
 });
+
+test("legacy scenes decode with empty connections and linked exits resolve by stable IDs", () => {
+  const old = decode(response);
+  assert.deepEqual(old.project.scenes[0].entrances, []);
+  assert.deepEqual(old.project.scenes[0].exits, []);
+  const linked = structuredClone(response);
+  linked.project.scenes[1].entrances = [{ id: "west-gate", name: "West gate", x: 0, y: 2 }];
+  linked.project.scenes[0].exits = [
+    {
+      id: "east-gate",
+      name: "East gate",
+      x: 19,
+      y: 2,
+      width: 1,
+      height: 2,
+      destination: { sceneId: "loom-yard", entranceId: "west-gate" },
+    },
+  ];
+  const snapshot = decode(linked);
+  assert.equal(sceneMetrics(snapshot.project.scenes[0]).triggers, 1);
+  linked.project.scenes[1].entrances = [];
+  assert.throws(() => decode(linked), /Invalid destination/);
+});

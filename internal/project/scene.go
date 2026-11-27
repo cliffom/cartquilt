@@ -37,7 +37,7 @@ func AddScene(path string, input AddSceneInput) (SceneResult, error) {
 
 	return writeScenes(path, input.BaseRevision, func(current Project, entries []json.RawMessage) ([]json.RawMessage, string, error) {
 		scene := Scene{
-			ID:   newSceneID(),
+			ID:   newObjectID("scene"),
 			Name: name, Width: input.Width, Height: input.Height,
 			World: nextScenePosition(current), Actors: []Actor{},
 		}
@@ -54,10 +54,10 @@ func nextScenePosition(current Project) Point {
 	return Point{X: last + 280}
 }
 
-func newSceneID() string {
+func newObjectID(kind string) string {
 	var id [16]byte
 	rand.Read(id[:])
-	return fmt.Sprintf("scene-%x", id)
+	return fmt.Sprintf("%s-%x", kind, id)
 }
 
 func writeScenes(path, baseRevision string, edit func(Project, []json.RawMessage) ([]json.RawMessage, string, error)) (SceneResult, error) {

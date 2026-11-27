@@ -1,4 +1,4 @@
-import { get } from "./dom.js";
+import { get, positionContextMenu } from "./dom.js";
 import { decode, type Workspace } from "./model.js";
 
 type SceneAction = "rename" | "duplicate" | "color" | "delete";
@@ -22,8 +22,10 @@ export function setupSceneActions(
   workspace: Workspace,
   queueWrite: QueueSceneWrite,
   changed: (action: SceneAction, id: string, surface: SceneSurface) => void,
+  showConnections: (id: string, card: HTMLElement) => void,
 ) {
   const menu = get("scene-context-menu");
+  const connections = get<HTMLButtonElement>("world-card-connections");
   const buttons = Array.from(menu.querySelectorAll<HTMLButtonElement>("button"));
   const chips = buttons.filter((button) => button.dataset.sceneColor !== undefined);
   for (const chip of chips) chip.style.setProperty("--chip-color", chip.dataset.sceneColor ?? "");
@@ -48,6 +50,7 @@ export function setupSceneActions(
   function show(id: string, surface: SceneSurface, anchor: HTMLElement, x?: number, y?: number) {
     if (pending || dialog.open) return;
     target = { id, surface, anchor };
+    connections.hidden = surface !== "world";
     const bounds = anchor.getBoundingClientRect();
     const scene = workspace.documentFor(id).scene;
     menu.setAttribute("aria-label", `Actions for ${scene.name}`);
@@ -57,9 +60,7 @@ export function setupSceneActions(
         String(chip.dataset.sceneColor === (scene.color?.toLowerCase() ?? "")),
       );
     }
-    menu.hidden = false;
-    menu.style.left = `${Math.max(8, Math.min(x ?? bounds.left, innerWidth - menu.offsetWidth - 8))}px`;
-    menu.style.top = `${Math.max(8, Math.min(y ?? bounds.bottom, innerHeight - menu.offsetHeight - 8))}px`;
+    positionContextMenu(menu, x ?? bounds.left, y ?? bounds.bottom);
     firstAction?.focus({ preventScroll: true });
   }
 
@@ -82,7 +83,8 @@ export function setupSceneActions(
   });
   window.addEventListener("resize", () => hideMenu());
   menu.onkeydown = (event) => {
-    const index = buttons.indexOf(event.target as HTMLButtonElement);
+    const visible = buttons.filter((button) => !button.hidden);
+    const index = visible.indexOf(event.target as HTMLButtonElement);
     if (event.key === "Escape" || event.key === "Tab") {
       hideMenu(true);
       if (event.key === "Escape") {
@@ -102,14 +104,14 @@ export function setupSceneActions(
       return;
     }
     const next: Record<string, number> = {
-      ArrowDown: (index + 1) % buttons.length,
-      ArrowUp: (index - 1 + buttons.length) % buttons.length,
+      ArrowDown: (index + 1) % visible.length,
+      ArrowUp: (index - 1 + visible.length) % visible.length,
       Home: 0,
-      End: buttons.length - 1,
+      End: visible.length - 1,
     };
     if (Object.hasOwn(next, event.key)) {
       event.preventDefault();
-      buttons[next[event.key]]?.focus();
+      visible[next[event.key]]?.focus();
     }
   };
 
@@ -168,6 +170,11 @@ export function setupSceneActions(
   for (const item of buttons) {
     item.onclick = () => {
       if (!target) return;
+      if (item === connections) {
+        hideMenu();
+        showConnections(target.id, target.anchor);
+        return;
+      }
       const scene = workspace.documentFor(target.id).scene;
       hideMenu(true);
       if (item.dataset.sceneColor !== undefined) {

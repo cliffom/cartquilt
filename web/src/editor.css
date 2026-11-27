@@ -236,6 +236,10 @@ input {
   border-bottom: 1px solid var(--border);
   padding: 12px 18px;
 }
+#toolbar > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 h1 {
   margin: 3px 0 0;
   font-size: 22px;
@@ -251,11 +255,44 @@ h1 {
   padding: 0;
   font: 12px var(--mono);
 }
-#actions {
+#actions:not([hidden]),
+.scene-toolbar:not([hidden]),
+.scene-tool-group {
   display: flex;
   align-items: center;
   gap: 4px;
   font: 13px var(--mono);
+}
+.scene-toolbar:not([hidden]) {
+  flex: none;
+  gap: 8px;
+}
+.scene-tool-group + .scene-tool-group {
+  border-inline-start: 1px solid var(--border);
+  padding-inline-start: 8px;
+}
+.scene-toolbar button {
+  height: 32px;
+  white-space: nowrap;
+}
+.scene-toolbar button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+.scene-icon-button {
+  display: grid;
+  width: 32px;
+  padding: 0;
+  place-items: center;
+}
+.scene-icon-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 #percentage {
   min-width: 45px;
@@ -272,7 +309,9 @@ h1 {
   background-size: 16px 16px;
   cursor: grab;
 }
-#canvas:active {
+#canvas:active,
+#canvas.middle-panning,
+#canvas.middle-panning :is(.card, .scene-card-header, .world-connection) {
   cursor: grabbing;
 }
 #plane {
@@ -281,6 +320,7 @@ h1 {
 }
 .card {
   position: absolute;
+  z-index: 1;
   padding: 4px;
   width: 248px;
   background: var(--panel);
@@ -355,7 +395,7 @@ h1 {
   pointer-events: none;
 }
 .card:is(:hover, :focus-visible) {
-  z-index: 1;
+  z-index: 2;
 }
 .card:not([data-tooltip-dismissed]):focus-visible .scene-card-tooltip,
 .card:not([data-tooltip-dismissed]) .scene-card-footer:hover .scene-card-tooltip {
@@ -408,6 +448,13 @@ button.sprite[aria-pressed="true"] {
 #canvas.scene #plane {
   position: relative;
   width: min(88cqw, calc(82cqh * var(--ratio)), 800px);
+}
+.scene-cell-hover {
+  position: absolute;
+  z-index: 2;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  pointer-events: none;
 }
 #hints {
   border-top: 1px solid var(--border);
@@ -628,6 +675,7 @@ footer {
 }
 #new-project-dialog,
 #new-scene-dialog,
+#connection-dialog,
 #scene-action-dialog,
 #confirm-project-close {
   width: min(420px, calc(100% - 28px));
@@ -639,6 +687,7 @@ footer {
 }
 #new-project-dialog::backdrop,
 #new-scene-dialog::backdrop,
+#connection-dialog::backdrop,
 #scene-action-dialog::backdrop,
 #confirm-project-close::backdrop {
   background: #000a;
@@ -784,6 +833,9 @@ footer {
     linear-gradient(to bottom, var(--border) 1px, transparent 1px);
   background-size: calc(100% / var(--scene-columns, 5)) calc(100% / var(--scene-rows, 4));
 }
+.blank-art {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
 .blank-scene-thumbnail {
   flex: 0 0 25px;
   height: 20px;
@@ -824,7 +876,7 @@ footer {
   border-color: transparent;
   background: transparent;
 }
-#scene-context-menu:not([hidden]) {
+.scene-menu:not([hidden]) {
   position: fixed;
   z-index: 12;
   display: grid;
@@ -835,17 +887,29 @@ footer {
   background: var(--panel);
   box-shadow: 0 6px 18px #0006;
 }
-#scene-context-menu button {
+.scene-menu button {
   min-height: 32px;
   border: 0;
   background: transparent;
   text-align: left;
 }
-#scene-context-menu button:hover {
+.scene-menu button:hover:enabled {
   background: var(--selected);
 }
-#scene-context-menu .scene-delete-menu {
+.scene-menu .scene-delete-menu {
   color: var(--draft);
+}
+#connection-menu {
+  max-width: min(320px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}
+#connection-removals:not([hidden]) {
+  display: grid;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 4px;
+  overflow-wrap: anywhere;
 }
 #scene-action-form,
 #scene-action-name-field:not([hidden]) {
@@ -899,4 +963,124 @@ footer {
 }
 #retry-layout-save {
   flex-shrink: 0;
+}
+
+#connection-form,
+#connection-exit-fields:not([hidden]) {
+  display: grid;
+  gap: 10px;
+}
+.select-field {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.select-field select {
+  appearance: none;
+  min-width: 0;
+  width: 100%;
+  padding-block: 7px;
+  padding-inline: 8px 32px;
+  background: var(--canvas);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font: inherit;
+}
+.select-field::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+#canvas.placing-connection,
+#canvas.placing-connection .art button {
+  cursor: crosshair;
+}
+#canvas.selecting-tile-area :is(.scene-cell-hover, .scene-tile-selection) {
+  visibility: hidden;
+}
+#canvas.scene .art {
+  user-select: none;
+}
+.tile-drag-preview,
+.scene-tile-selection {
+  position: absolute;
+  z-index: 2;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  pointer-events: none;
+}
+.scene-marker {
+  position: absolute;
+  z-index: 1;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  background: #151915b0;
+  font: 700 clamp(6px, 1.1vw, 11px) / 1 var(--mono);
+  color: var(--accent);
+}
+.scene-marker-exit {
+  color: var(--draft);
+  border-style: dashed;
+}
+.scene-marker-preview {
+  background: color-mix(in srgb, currentColor 25%, #151915b0);
+  pointer-events: none;
+}
+.world-connection {
+  position: absolute;
+  z-index: 0;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  transform-origin: left center;
+}
+.world-connection:hover:enabled {
+  background: transparent;
+  color: var(--text);
+}
+.world-connection::before,
+.world-connection::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+}
+.world-connection::before {
+  inset-inline: 0;
+  height: 2px;
+  transform: translateY(-50%);
+  background: currentColor;
+}
+.world-connection::after {
+  right: 0;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  transform: translateY(-50%) rotate(45deg);
+}
+.connection-summary {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 520px) {
+  #actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+@media (max-width: 420px) {
+  #toolbar:has(.scene-toolbar:not([hidden])) {
+    flex-wrap: wrap;
+  }
 }

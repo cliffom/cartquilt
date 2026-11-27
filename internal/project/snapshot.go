@@ -21,14 +21,16 @@ type Actor struct {
 	Point
 }
 type Scene struct {
-	ID     string  `json:"id"`
-	Name   string  `json:"name"`
-	Art    string  `json:"art"`
-	Color  string  `json:"color,omitempty"`
-	Width  int     `json:"width"`
-	Height int     `json:"height"`
-	World  Point   `json:"world"`
-	Actors []Actor `json:"actors"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Art       string     `json:"art"`
+	Color     string     `json:"color,omitempty"`
+	Width     int        `json:"width"`
+	Height    int        `json:"height"`
+	World     Point      `json:"world"`
+	Actors    []Actor    `json:"actors"`
+	Entrances []Entrance `json:"entrances,omitempty"`
+	Exits     []Exit     `json:"exits,omitempty"`
 }
 type Project struct {
 	Version int     `json:"version"`
@@ -74,6 +76,9 @@ func decodeSnapshot(data []byte) (Snapshot, error) {
 			}
 			actors[a.ID] = true
 		}
+	}
+	if err := validateConnections(p); err != nil {
+		return Snapshot{}, err
 	}
 	return Snapshot{fmt.Sprintf("%x", sha256.Sum256(data)), p}, nil
 }

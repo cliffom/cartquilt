@@ -6,6 +6,12 @@ export type Actor = Point & {
   width: number;
   height: number;
 };
+export type Entrance = Point & { id: string; name: string };
+export type Exit = Entrance & {
+  width: number;
+  height: number;
+  destination: { sceneId: string; entranceId: string };
+};
 export type Scene = {
   id: string;
   name: string;
@@ -15,6 +21,8 @@ export type Scene = {
   width: number;
   height: number;
   actors: Actor[];
+  entrances: Entrance[];
+  exits: Exit[];
 };
 export type Project = { version: 1; id: string; name: string; scenes: Scene[] };
 export type Snapshot = { project: Project; revision: string };
@@ -80,8 +88,41 @@ export function decode(value: unknown): Snapshot {
       height,
       world: { x: integer(world.x), y: integer(world.y) },
       actors,
+      entrances: items(s.entrances === undefined ? [] : s.entrances, (entry) => ({
+        id: str(entry.id, id),
+        name: str(entry.name),
+        x: integer(entry.x, 0, width - 1),
+        y: integer(entry.y, 0, height - 1),
+      })),
+      exits: items(s.exits === undefined ? [] : s.exits, (entry) => {
+        const x = integer(entry.x, 0, width - 1);
+        const y = integer(entry.y, 0, height - 1);
+        const destination = record(entry.destination);
+        return {
+          id: str(entry.id, id),
+          name: str(entry.name),
+          x,
+          y,
+          width: integer(entry.width, 1, width - x),
+          height: integer(entry.height, 1, height - y),
+          destination: {
+            sceneId: str(destination.sceneId, id),
+            entranceId: str(destination.entranceId, id),
+          },
+        };
+      }),
     };
   });
+  const entrancesByScene = new Map(
+    scenes.map((scene) => [scene.id, new Set(scene.entrances.map((entry) => entry.id))]),
+  );
+  for (const scene of scenes) {
+    for (const exit of scene.exits) {
+      const { sceneId, entranceId } = exit.destination;
+      if (sceneId === scene.id || !entrancesByScene.get(sceneId)?.has(entranceId))
+        throw Error(`Invalid destination for exit ${exit.name}`);
+    }
+  }
   return {
     revision: str(snapshot.revision, /^[0-9a-f]{64}$/),
     project: { version: 1, id: str(p.id, id), name: str(p.name), scenes },
@@ -108,6 +149,8 @@ export class SceneDocument {
       name: saved.name,
       color: saved.color,
       world: saved.world,
+      entrances: saved.entrances,
+      exits: saved.exits,
     });
     this.saved = update(this.saved);
     this.scene = update(this.scene);
@@ -196,7 +239,7 @@ export class Workspace {
   acceptSceneAction(
     next: Snapshot,
     target: string,
-    action: "rename" | "color" | "delete" | "position",
+    action: "rename" | "color" | "delete" | "position" | "connection",
   ) {
     const current = this.saved.project;
     const expected =
@@ -210,6 +253,8 @@ export class Workspace {
             name: action === "rename" ? previous?.name : scene.name,
             color: action === "color" ? previous?.color : scene.color,
             world: action === "position" ? previous?.world : scene.world,
+            entrances: action === "connection" ? previous?.entrances : scene.entrances,
+            exits: action === "connection" ? previous?.exits : scene.exits,
           }
         : scene;
     if (

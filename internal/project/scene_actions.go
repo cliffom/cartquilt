@@ -11,11 +11,13 @@ import (
 var ErrSceneNotFound = errors.New("scene no longer exists")
 
 type SceneActionInput struct {
-	BaseRevision string `json:"baseRevision"`
-	Action       string `json:"action"`
-	Name         string `json:"name,omitempty"`
-	Color        string `json:"color,omitempty"`
-	World        *Point `json:"world,omitempty"`
+	BaseRevision string    `json:"baseRevision"`
+	Action       string    `json:"action"`
+	Name         string    `json:"name,omitempty"`
+	Color        string    `json:"color,omitempty"`
+	World        *Point    `json:"world,omitempty"`
+	Entrance     *Entrance `json:"entrance,omitempty"`
+	Exit         *Exit     `json:"exit,omitempty"`
 }
 
 func ApplySceneAction(path, id string, input SceneActionInput) (SceneResult, error) {
@@ -39,6 +41,8 @@ func ApplySceneAction(path, id string, input SceneActionInput) (SceneResult, err
 			return SceneResult{}, fmt.Errorf("%w: enter a valid world position", ErrInvalidInput)
 		}
 	case "duplicate", "delete":
+	case "entrance", "exit", "remove-entrance", "remove-exit":
+		return applyConnectionAction(path, id, input)
 	default:
 		return SceneResult{}, fmt.Errorf("%w: unknown scene action", ErrInvalidInput)
 	}
@@ -67,7 +71,7 @@ func ApplySceneAction(path, id string, input SceneActionInput) (SceneResult, err
 		case "position":
 			fields["world"], _ = json.Marshal(input.World)
 		case "duplicate":
-			id = newSceneID()
+			id = newObjectID("scene")
 			fields["id"], _ = json.Marshal(id)
 			fields["name"], _ = json.Marshal(current.Scenes[index].Name + " copy")
 			fields["world"], _ = json.Marshal(nextScenePosition(current))

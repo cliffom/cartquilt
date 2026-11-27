@@ -70,6 +70,14 @@ Rename, duplicate, border color, and delete use the same manifest write path. A 
 
 Tiled's `.world` format associates each exported map file with a global pixel position. Define how editor layout units map to those pixels when whole-world export is implemented. [Tiled worlds](https://doc.mapeditor.org/en/stable/manual/worlds/)
 
+### D12 · Scene entrances and exit triggers
+
+**Accepted · Architecture · 2026-11-27 · M2.** Save entrances as named tile positions and exits as named rectangles in scene-local tiles. An exit references its destination scene ID and an entrance ID scoped to that scene. Derive world-map arrows from those exits. The project loader checks bounds and references, and scene writes reject removing a destination with incoming exits. The diagnostic identifies the source exit to relink or remove. Verify that renaming the destination preserves the connection and that opening an arrow selects its exact trigger.
+
+**Accepted · Interaction design · 2026-11-27 · M2.** Open the scene grid’s context menu to place an entrance or exit at the clicked tile. Drag across the grid or click one corner and Shift-click the opposite corner to select a rectangle for an exit. Use the Exit tool or the context menu inside the selection to assign it. You can also drag with the Exit tool or enter tile coordinates and dimensions with the keyboard. An entrance sets one precise spawn tile for both movement profiles. The player’s collision footprint and arrival rules belong to the movement profile.
+
+The editor and world map previews share tile hover, rectangle selection, and the grid context menu. The menu lists individual removal actions for connections that overlap the clicked tile or its active selection. Each action confirms the named connection before saving the removal. The entrance action appears only for single-tile contexts and requires an empty tile. Adding an exit from the menu requires an empty trigger area.
+
 ### Decisions due before dependent work
 
 | Before | Decide | Evidence needed |

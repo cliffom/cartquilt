@@ -1,4 +1,11 @@
 import "./editor.css";
+import {
+  connectionLabel,
+  drawConnectionMarkers,
+  positionWorldConnections,
+  sceneConnections,
+  setupConnections,
+} from "./connections.js";
 import { button, el, get } from "./dom.js";
 import { createSceneWriteQueue, setupSceneActions, type QueueSceneWrite } from "./scene-actions.js";
 import { decode, Workspace, type Scene, type Point } from "./model.js";
@@ -478,6 +485,35 @@ async function start() {
     };
   });
   const queueWrite = createSceneWriteQueue();
+  const connections = setupConnections(w, queueWrite, canvas, render);
+  const sceneToolbar = get("scene-toolbar");
+  const entranceTool = get<HTMLButtonElement>("place-entrance");
+  const exitTool = get<HTMLButtonElement>("place-exit");
+  const undoTool = get<HTMLButtonElement>("undo-scene");
+  const redoTool = get<HTMLButtonElement>("redo-scene");
+  for (const [kind, tool] of [
+    ["entrance", entranceTool],
+    ["exit", exitTool],
+  ] as const) {
+    tool.onclick = () => {
+      if (connections.placement === kind) {
+        connections.resetPlacement();
+        render();
+      } else {
+        connections.start(kind);
+        updateSceneTools();
+      }
+    };
+  }
+  for (const [op, tool, alternate] of [
+    ["undo", undoTool, redoTool],
+    ["redo", redoTool, undoTool],
+  ] as const) {
+    tool.onclick = () => {
+      history(op);
+      if (tool.disabled) (alternate.disabled ? canvas : alternate).focus({ preventScroll: true });
+    };
+  }
   const newScene = setupSceneCreation(w, queueWrite, (id) => {
     if (id) {
       w.selected = id;
@@ -493,28 +529,34 @@ async function start() {
     }
   });
   get("add-scene").onclick = newScene;
-  const sceneActions = setupSceneActions(w, queueWrite, (action, id, surface) => {
-    if (action === "duplicate") {
-      w.selected = id;
-      w.desk = "world";
-      showSceneGroup(true);
-      showSceneSearch(false);
-      closePanel(false);
-    }
-    render();
-    if (action === "duplicate") fit();
-    const root = surface === "world" || action === "duplicate" ? plane : get("scenes");
-    const focusId = action === "delete" ? w.selected : id;
-    const scene = Array.from(root.querySelectorAll<HTMLButtonElement>("button[data-id]")).find(
-      (entry) => entry.dataset.id === focusId,
-    );
-    const fallback = surface === "navigator" ? get("add-scene") : canvas;
-    (scene ?? fallback).focus({ preventScroll: true });
-  });
+  const sceneActions = setupSceneActions(
+    w,
+    queueWrite,
+    (action, id, surface) => {
+      if (action === "duplicate") {
+        w.selected = id;
+        w.desk = "world";
+        showSceneGroup(true);
+        showSceneSearch(false);
+        closePanel(false);
+      }
+      render();
+      if (action === "duplicate") fit();
+      const root = surface === "world" || action === "duplicate" ? plane : get("scenes");
+      const focusId = action === "delete" ? w.selected : id;
+      const scene = Array.from(root.querySelectorAll<HTMLButtonElement>("button[data-id]")).find(
+        (entry) => entry.dataset.id === focusId,
+      );
+      const fallback = surface === "navigator" ? get("add-scene") : canvas;
+      (scene ?? fallback).focus({ preventScroll: true });
+    },
+    connections.openPreviewMenu,
+  );
   function sceneMode() {
     return w.desk === "scene";
   }
   function open(id: string) {
+    connections.resetPlacement();
     w.selected = id;
     w.desk = "scene";
     closePanel(false);
@@ -522,6 +564,7 @@ async function start() {
     get("crumb").querySelector("button")?.focus();
   }
   function back() {
+    connections.resetPlacement();
     w.desk = "world";
     closePanel(false);
     render();
@@ -550,12 +593,12 @@ async function start() {
   function artwork(s: Scene, interactive = false) {
     const art = el("span", "art");
     art.style.aspectRatio = `${s.width}/${s.height}`;
+    art.style.setProperty("--scene-columns", String(s.width));
+    art.style.setProperty("--scene-rows", String(s.height));
     if (s.art) {
       art.append(img(s.art, "background"));
     } else {
       art.classList.add("blank-art");
-      art.style.setProperty("--scene-columns", String(s.width));
-      art.style.setProperty("--scene-rows", String(s.height));
     }
     for (const a of s.actors) {
       const sprite = interactive
@@ -572,6 +615,12 @@ async function start() {
       sprite.append(img(a.sprite));
       art.append(sprite);
     }
+    drawConnectionMarkers(
+      art,
+      s,
+      interactive ? (kind, point) => connections.editPoint(s, kind, point) : undefined,
+    );
+    if (interactive) connections.attachGrid(art, s);
     return art;
   }
   function navigator() {
@@ -622,6 +671,22 @@ async function start() {
       objects.append(row);
     }
     if (!w.active.scene.actors.length) objects.append(el("p", "empty", "No objects in this scene"));
+    const scene = w.active.scene;
+    if (scene.entrances.length || scene.exits.length) {
+      objects.append(el("div", "section", "Connections"));
+      for (const entrance of scene.entrances)
+        objects.append(
+          button(
+            `Entrance · ${entrance.name}`,
+            () => connections.editPoint(scene, "entrance", entrance),
+            "row",
+          ),
+        );
+      for (const exit of scene.exits)
+        objects.append(
+          button(`Exit · ${exit.name}`, () => connections.editPoint(scene, "exit", exit), "row"),
+        );
+    }
   }
   function showSceneGroup(show: boolean) {
     sceneGroup.hidden = !show;
@@ -654,21 +719,22 @@ async function start() {
     event.stopPropagation();
     toggleSceneSearch();
   };
+  function updateSceneTools() {
+    pressed(entranceTool, connections.placement === "entrance");
+    pressed(exitTool, connections.placement === "exit");
+    undoTool.disabled = !w.active.canUndo;
+    redoTool.disabled = !w.active.canRedo;
+  }
   function toolbar() {
     const crumb = get("crumb");
     crumb.replaceChildren();
     actions.replaceChildren();
+    sceneToolbar.hidden = !sceneMode();
+    actions.hidden = sceneMode();
     get("desk-title").textContent = sceneMode() ? w.active.scene.name : "World map";
     if (sceneMode()) {
       crumb.append(button("← World map", back));
-      for (const op of ["undo", "redo"] as const) {
-        const b = button(op === "undo" ? "Undo" : "Redo", () => {
-          history(op);
-          (actions.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? canvas).focus();
-        });
-        b.disabled = !(op === "undo" ? w.active.canUndo : w.active.canRedo);
-        actions.append(b);
-      }
+      updateSceneTools();
     } else {
       crumb.textContent = "World desk";
       const out = button("−", () => zoom(1 / 1.2)),
@@ -769,7 +835,24 @@ async function start() {
           ),
         );
       }
-      if (!sceneMode()) details.append(button("Open scene", () => open(s.id), "primary"));
+      if (!sceneMode()) {
+        details.append(button("Open scene", () => open(s.id), "primary"));
+        const links = sceneConnections(w.snapshot.project).filter(
+          (link) => link.source.id === s.id || link.target.id === s.id,
+        );
+        if (links.length) details.append(el("div", "section", "Connections"));
+        for (const link of links)
+          details.append(
+            button(
+              connectionLabel(link),
+              () => {
+                open(link.source.id);
+                connections.editPoint(w.active.scene, "exit", link.exit);
+              },
+              "row connection-summary",
+            ),
+          );
+      }
     }
   }
   // Capture completed moves. An in-flight save never replaces a newer position in the tab.
@@ -859,16 +942,20 @@ async function start() {
           }
         : null;
   }
-  function positionCards() {
-    if (sceneMode()) return;
+  function positionCamera() {
     const c = w.camera;
     plane.style.transform = `translate(${c.x}px,${c.y}px) scale(${c.zoom})`;
     get("percentage").textContent = `${Math.round(c.zoom * 100)}%`;
+  }
+  function positionCards() {
+    if (sceneMode()) return;
+    positionCamera();
     for (const card of plane.querySelectorAll<HTMLElement>(".card")) {
       const p = w.positionFor(card.dataset.id);
       card.style.left = `${p.x}px`;
       card.style.top = `${p.y}px`;
     }
+    positionWorldConnections(plane, w);
   }
   function zoom(factor: number, x = canvas.clientWidth / 2, y = canvas.clientHeight / 2) {
     const c = w.camera,
@@ -876,7 +963,7 @@ async function start() {
     c.x = x - ((x - c.x) * next) / c.zoom;
     c.y = y - ((y - c.y) * next) / c.zoom;
     c.zoom = next;
-    positionCards();
+    positionCamera();
   }
   function fit() {
     const bounds = Array.from(plane.querySelectorAll<HTMLElement>(".card"), (card) => {
@@ -897,15 +984,42 @@ async function start() {
       y: (canvas.clientHeight - height * z) / 2 - t * z,
       zoom: z,
     };
-    positionCards();
+    positionCamera();
   }
   function draw() {
+    finishWorldDrag(true);
     plane.replaceChildren();
     if (sceneMode()) {
       plane.style.transform = "";
       plane.style.setProperty("--ratio", String(w.active.scene.width / w.active.scene.height));
       plane.append(artwork(w.active.scene, true));
       return;
+    }
+    const groups = new Map<string, ReturnType<typeof sceneConnections>>();
+    for (const link of sceneConnections(w.snapshot.project)) {
+      const key = [link.source.id, link.target.id].sort().join("/");
+      const group = groups.get(key) ?? [];
+      group.push(link);
+      groups.set(key, group);
+    }
+    for (const group of groups.values()) {
+      for (const [index, link] of group.entries()) {
+        const edge = button(
+          "",
+          () => {
+            open(link.source.id);
+            connections.editPoint(w.active.scene, "exit", link.exit);
+          },
+          "world-connection",
+        );
+        edge.title = connectionLabel(link);
+        edge.setAttribute("aria-label", edge.title);
+        edge.dataset.source = link.source.id;
+        edge.dataset.target = link.target.id;
+        const lane = (index - (group.length - 1) / 2) * (link.source.id < link.target.id ? 1 : -1);
+        edge.dataset.lane = String(lane);
+        plane.append(edge);
+      }
     }
     for (const d of w.documents.values()) {
       const s = d.scene,
@@ -915,7 +1029,9 @@ async function start() {
       sceneActions.attach(card, s.id, "world");
       pressed(card, s.id === w.selected);
       card.onclick = () => selectScene(s.id);
-      card.ondblclick = () => open(s.id);
+      card.ondblclick = (event) => {
+        if (!event.shiftKey) open(s.id);
+      };
       const header = el("span", "scene-card-header");
       const title = el("span", "scene-card-name", s.name);
       title.title = s.name;
@@ -941,6 +1057,7 @@ async function start() {
       const rows = [
         `Size ${s.width}×${s.height} tiles (${s.width * 8}×${s.height * 8} pixels)`,
         `Actors ${metrics.actors} · Triggers ${metrics.triggers}`,
+        `Entrances ${s.entrances.length}`,
         `Estimated sprite tiles ${metrics.spriteTiles}`,
       ];
       if (gbc) {
@@ -957,82 +1074,114 @@ async function start() {
       card.onfocus = () => delete card.dataset.tooltipDismissed;
       card.setAttribute("aria-label", d.dirty ? `${s.name} · Draft` : s.name);
       card.setAttribute("aria-describedby", tooltip.id);
-      card.append(header, artwork(s), footer);
+      const preview = artwork(s);
+      connections.attachGrid(preview, s, card);
+      card.append(header, preview, footer);
       plane.append(card);
     }
     positionCards();
   }
   function render() {
+    connections.syncDesk();
     canvas.classList.toggle("scene", sceneMode());
     canvas.setAttribute(
       "aria-label",
       sceneMode() ? `${w.active.scene.name} scene canvas` : "World map canvas",
     );
     get("hints").textContent = sceneMode()
-      ? "Select an actor to edit its position"
-      : "Drag a scene header to move it · Double-click a scene to open";
+      ? "Drag or Shift-click to select tiles · Right-click to add a connection"
+      : "Drag a scene header to move it · Double-click to open · Drag or Shift-click tiles to select";
     if (!w.snapshot.project.scenes.length)
       get("hints").textContent = "This world has no scenes yet";
-    if (sceneMode() && !w.active.scene.actors.length)
-      get("hints").textContent = "No actors in this scene";
     toolbar();
     draw();
     navigator();
     inspector();
     status();
   }
-  type Drag = { pointer: number; start: Point; origin: Point; card?: string; moved: boolean };
+  type Drag = {
+    pointer: number;
+    buttons: number;
+    owner: HTMLElement;
+    start: Point;
+    origin: Point;
+    card?: string;
+    moved: boolean;
+  };
   let drag: Drag | undefined;
+  function finishWorldDrag(cancel = false) {
+    if (!drag) return;
+    const { pointer, owner, card, origin, moved } = drag;
+    drag = undefined;
+    canvas.classList.remove("middle-panning");
+    if (owner.hasPointerCapture(pointer)) owner.releasePointerCapture(pointer);
+    if (!card || !moved || !w.positions.has(card)) return;
+    if (cancel) {
+      w.positions.set(card, origin);
+      positionCards();
+      status();
+    } else {
+      savePosition(card);
+    }
+  }
   canvas.onpointerdown = (e) => {
-    if (sceneMode() || e.button !== 0 || drag) return;
+    const middlePan = e.pointerType === "mouse" && e.button === 1;
+    if (sceneMode() || drag || (e.button !== 0 && !middlePan)) return;
     const target = e.target as Element;
-    const card = target.closest<HTMLElement>(".card");
+    if (!middlePan && target.closest(".world-connection")) return;
+    const card = middlePan ? null : target.closest<HTMLElement>(".card");
     if (card && !target.closest(".scene-card-header")) return;
     const id = card?.dataset.id;
     drag = {
       pointer: e.pointerId,
+      buttons: middlePan ? 4 : 1,
+      owner: card ?? canvas,
       start: { x: e.clientX, y: e.clientY },
       origin: { ...(id ? w.positionFor(id) : w.camera) },
       card: id,
       moved: false,
     };
-    (card ?? canvas).setPointerCapture(e.pointerId);
+    if (middlePan) {
+      e.preventDefault();
+      canvas.classList.add("middle-panning");
+    }
+    drag.owner.setPointerCapture(e.pointerId);
   };
   canvas.onpointermove = (e) => {
     if (!drag || e.pointerId !== drag.pointer) return;
+    if ((e.buttons & drag.buttons) === 0) {
+      finishWorldDrag();
+      return;
+    }
     const dx = e.clientX - drag.start.x,
       dy = e.clientY - drag.start.y;
     if (!drag.moved && Math.hypot(dx, dy) < 3) return;
     if (!drag.moved && drag.card) selectScene(drag.card);
     drag.moved = true;
-    if (drag.card)
+    if (drag.card) {
       w.positions.set(drag.card, {
         x: drag.origin.x + dx / w.camera.zoom,
         y: drag.origin.y + dy / w.camera.zoom,
       });
-    else {
-      w.camera.x = drag.origin.x + dx;
-      w.camera.y = drag.origin.y + dy;
-    }
-    positionCards();
-    status();
-  };
-  canvas.onpointerup = (event) => {
-    if (!drag || drag.pointer !== event.pointerId) return;
-    const { card, moved } = drag;
-    drag = undefined;
-    if (card && moved) savePosition(card);
-  };
-  canvas.onlostpointercapture = (event) => {
-    if (!drag || drag.pointer !== event.pointerId) return;
-    const { card, origin, moved } = drag;
-    drag = undefined;
-    if (card && moved) {
-      w.positions.set(card, origin);
       positionCards();
       status();
+    } else {
+      w.camera.x = drag.origin.x + dx;
+      w.camera.y = drag.origin.y + dy;
+      positionCamera();
     }
   };
+  canvas.onpointerup = (event) => {
+    if (drag?.pointer === event.pointerId) finishWorldDrag();
+  };
+  for (const type of ["pointercancel", "lostpointercapture"] as const) {
+    canvas.addEventListener(type, (event) => {
+      if (drag?.pointer === event.pointerId && drag.owner === event.target) finishWorldDrag(true);
+    });
+  }
+  canvas.addEventListener("auxclick", (event) => {
+    if (!sceneMode() && event.button === 1) event.preventDefault();
+  });
   canvas.addEventListener(
     "wheel",
     (e) => {

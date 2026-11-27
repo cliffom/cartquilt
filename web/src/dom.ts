@@ -14,3 +14,27 @@ export function button(label: string, act: () => void, cls = "") {
   node.onclick = act;
   return node;
 }
+
+export function tileAt(
+  art: Element,
+  pointer: Pick<MouseEvent, "clientX" | "clientY">,
+  columns: number,
+  rows: number,
+  clamp = false,
+) {
+  const bounds = art.getBoundingClientRect();
+  if (!bounds.width || !bounds.height) return;
+  const x = Math.floor(((pointer.clientX - bounds.left) * columns) / bounds.width);
+  const y = Math.floor(((pointer.clientY - bounds.top) * rows) / bounds.height);
+  if (!clamp) return x >= 0 && x < columns && y >= 0 && y < rows ? { x, y } : undefined;
+  return {
+    x: Math.max(0, Math.min(x, columns - 1)),
+    y: Math.max(0, Math.min(y, rows - 1)),
+  };
+}
+
+export function positionContextMenu(menu: HTMLElement, x: number, y: number) {
+  menu.hidden = false;
+  menu.style.left = `${Math.max(8, Math.min(x, innerWidth - menu.offsetWidth - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - menu.offsetHeight - 8))}px`;
+}

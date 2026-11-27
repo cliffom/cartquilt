@@ -45,7 +45,17 @@ Keep referenced PNGs beside `project.json`. Scene dimensions are in 8-pixel tile
 
 In the Navigator, choose **+** next to **Scenes**, enter a name and dimensions in tiles, and select **Create scene**. Cartquilt saves the blank scene and selects its card on the world map. Double-click the card or choose **Open scene** in the Inspector to see the grid. Use the search icon next to **Scenes** to filter the list by name.
 
-Right-click a scene in the Navigator or on the world map to rename it, duplicate its saved contents, change its border color, or delete it. The Navigator’s **⋯** button and **Shift+F10** open the same menu. Cartquilt asks for confirmation before deleting a scene.
+Right-click a scene in the Navigator or its header on the world map to rename it, duplicate its saved contents, change its border color, or delete it. The Navigator’s **⋯** button and **Shift+F10** open the same menu. Cartquilt asks for confirmation before deleting a scene. Middle-drag anywhere on the world map to pan.
+
+## Connect two scenes
+
+1. Right-click an empty tile in the destination scene’s editor or world map preview. Choose **+ Entrance**, name the spawn point, and save.
+2. In the source scene, drag across empty tiles to select the trigger area. Right-click inside the selection, choose **+ Exit**, and select the destination scene and entrance. You can also right-click a single tile and enter the trigger’s dimensions in the form.
+3. On the world map, select the arrow to open the source exit for inspection or editing. The Inspector lists the connections for the selected scene.
+
+For keyboard placement, use **Shift+F10** on a world map card and choose **Connections…**. In the scene editor, activate a placement tool and press **Enter** to enter coordinates.
+
+Relink or remove incoming exits before deleting their destination entrance or scene.
 
 ## Development and roadmap
 
