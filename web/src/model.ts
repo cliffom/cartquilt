@@ -11,6 +11,7 @@ export type Scene = {
   name: string;
   world: Point;
   art: string;
+  color?: string;
   width: number;
   height: number;
   actors: Actor[];
@@ -48,6 +49,7 @@ function items<T extends { id: string }>(
 }
 const id = /^[a-z][a-z0-9-]*$/;
 const asset = /^[a-zA-Z0-9_-]+\.png$/;
+const sceneColor = /^#[0-9a-f]{6}$/i;
 export function decode(value: unknown): Snapshot {
   const snapshot = record(value),
     p = record(snapshot.project);
@@ -73,6 +75,7 @@ export function decode(value: unknown): Snapshot {
       id: str(s.id, id),
       name: str(s.name),
       art: s.art === "" ? "" : str(s.art, asset),
+      color: s.color === undefined || s.color === "" ? undefined : str(s.color, sceneColor),
       width,
       height,
       world: { x: integer(world.x), y: integer(world.y) },
@@ -87,14 +90,24 @@ export function decode(value: unknown): Snapshot {
 
 export type MoveActor = { type: "moveActor"; actor: string; axis: keyof Point; value: number };
 export class SceneDocument {
-  readonly baseline: Scene;
+  private saved: Scene;
   scene: Scene;
   private past: Scene[] = [];
   private future: Scene[] = [];
   private group?: symbol;
   constructor(scene: Scene) {
-    this.baseline = structuredClone(scene);
+    this.saved = structuredClone(scene);
     this.scene = structuredClone(scene);
+  }
+  get baseline() {
+    return this.saved;
+  }
+  acceptSceneMetadata(saved: Scene) {
+    const update = (scene: Scene) => ({ ...scene, name: saved.name, color: saved.color });
+    this.saved = update(this.saved);
+    this.scene = update(this.scene);
+    this.past = this.past.map(update);
+    this.future = this.future.map(update);
   }
   get dirty() {
     return JSON.stringify(this.scene) !== JSON.stringify(this.baseline);
@@ -172,6 +185,42 @@ export class Workspace {
     for (const scene of scenes.slice(current.scenes.length)) {
       this.documents.set(scene.id, new SceneDocument(scene));
       this.positions.set(scene.id, { ...scene.world });
+    }
+    this.saved = next;
+  }
+  acceptSceneAction(next: Snapshot, target: string, action: "rename" | "color" | "delete") {
+    const current = this.saved.project;
+    const expected =
+      action === "delete" ? current.scenes.filter((s) => s.id !== target) : current.scenes;
+    const previous = current.scenes.find((s) => s.id === target);
+    const updated = next.project.scenes.find((s) => s.id === target);
+    const comparable = (scene: Scene) =>
+      scene.id === target && action !== "delete"
+        ? { ...scene, name: previous?.name, color: previous?.color }
+        : scene;
+    if (
+      !previous ||
+      next.project.id !== current.id ||
+      next.project.name !== current.name ||
+      next.project.scenes.length !== expected.length ||
+      next.project.scenes.some(
+        (scene, index) => JSON.stringify(comparable(scene)) !== JSON.stringify(expected[index]),
+      )
+    )
+      throw Error(
+        "Existing project data changed on disk. Reopen the project to load those changes.",
+      );
+
+    if (action === "delete") {
+      this.documents.delete(target);
+      this.positions.delete(target);
+      this.objects.delete(target);
+      if (this.selected === target) {
+        this.selected = next.project.scenes[0]?.id;
+        this.desk = "world";
+      }
+    } else if (updated) {
+      this.documentFor(target).acceptSceneMetadata(updated);
     }
     this.saved = next;
   }

@@ -24,6 +24,7 @@ type Scene struct {
 	ID     string  `json:"id"`
 	Name   string  `json:"name"`
 	Art    string  `json:"art"`
+	Color  string  `json:"color,omitempty"`
 	Width  int     `json:"width"`
 	Height int     `json:"height"`
 	World  Point   `json:"world"`
@@ -41,6 +42,7 @@ type Snapshot struct {
 }
 
 var idPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+var sceneColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 var assetPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+\.png$`)
 
 func Load(path string) (Snapshot, error) {
@@ -61,7 +63,7 @@ func decodeSnapshot(data []byte) (Snapshot, error) {
 	}
 	ids := map[string]bool{}
 	for _, s := range p.Scenes {
-		if ids[s.ID] || !idPattern.MatchString(s.ID) || s.Name == "" || (s.Art != "" && !assetPattern.MatchString(s.Art)) || s.Width < 1 || s.Height < 1 || s.Width > 1024 || s.Height > 1024 || s.Actors == nil {
+		if ids[s.ID] || !idPattern.MatchString(s.ID) || s.Name == "" || (s.Art != "" && !assetPattern.MatchString(s.Art)) || (s.Color != "" && !sceneColorPattern.MatchString(s.Color)) || s.Width < 1 || s.Height < 1 || s.Width > 1024 || s.Height > 1024 || s.Actors == nil {
 			return Snapshot{}, fmt.Errorf("invalid scene %q", s.ID)
 		}
 		ids[s.ID] = true

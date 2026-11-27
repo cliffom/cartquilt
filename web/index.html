@@ -74,6 +74,35 @@
         </div>
       </form>
     </dialog>
+    <div id="scene-context-menu" role="menu" hidden>
+      <div class="scene-color-chips" role="group" aria-label="Border color">
+        <button type="button" role="menuitemradio" tabindex="-1" data-scene-color="" aria-checked="false" aria-label="Default border" title="Default border"></button>
+        <button type="button" role="menuitemradio" tabindex="-1" data-scene-color="#d47478" aria-checked="false" aria-label="Rose border" title="Rose border"></button>
+        <button type="button" role="menuitemradio" tabindex="-1" data-scene-color="#dc9a61" aria-checked="false" aria-label="Amber border" title="Amber border"></button>
+        <button type="button" role="menuitemradio" tabindex="-1" data-scene-color="#d9c569" aria-checked="false" aria-label="Gold border" title="Gold border"></button>
+        <button type="button" role="menuitemradio" tabindex="-1" data-scene-color="#a4bd64" aria-checked="false" aria-label="Moss border" title="Moss border"></button>
+        <button type="button" role="menuitemradio" tabindex="-1" data-scene-color="#67abc0" aria-checked="false" aria-label="Lake border" title="Lake border"></button>
+        <button type="button" role="menuitemradio" tabindex="-1" data-scene-color="#ad91ce" aria-checked="false" aria-label="Violet border" title="Violet border"></button>
+      </div>
+      <button type="button" role="menuitem" tabindex="-1" value="rename">Rename…</button>
+      <button type="button" role="menuitem" tabindex="-1" value="duplicate">Duplicate</button>
+      <button type="button" role="menuitem" tabindex="-1" value="delete" class="scene-delete-menu">Delete…</button>
+    </div>
+    <dialog id="scene-action-dialog" aria-labelledby="scene-action-title" aria-describedby="scene-action-description">
+      <form id="scene-action-form">
+        <h2 id="scene-action-title"></h2>
+        <p id="scene-action-description" hidden></p>
+        <div id="scene-action-name-field">
+          <label for="scene-action-name">Scene name</label>
+          <input id="scene-action-name" />
+        </div>
+        <div id="scene-action-message" role="status"></div>
+        <div class="dialog-actions">
+          <button type="button" id="cancel-scene-action">Cancel</button>
+          <button type="submit" id="apply-scene-action" class="primary">Save</button>
+        </div>
+      </form>
+    </dialog>
     <main id="project-launcher" hidden>
       <section class="launcher-card" aria-labelledby="launcher-title">
         <h1 id="launcher-title">Projects</h1>

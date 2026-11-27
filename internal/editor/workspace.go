@@ -77,6 +77,7 @@ func New(initial *project.Saved, web fs.FS) http.Handler {
 	}
 	mux.HandleFunc("GET /projects/{slug}/", serveOpenedProject)
 	mux.HandleFunc("POST /projects/{slug}/api/project/scenes", serveOpenedProject)
+	mux.HandleFunc("POST /projects/{slug}/api/project/scenes/{scene}/actions", serveOpenedProject)
 	mux.HandleFunc("POST /api/projects", func(w http.ResponseWriter, r *http.Request) {
 		var input project.CreateInput
 		if !decodeLocalRequest(w, r, &input) {

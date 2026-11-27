@@ -150,7 +150,7 @@ func TestCreateSceneThroughOpenedProject(t *testing.T) {
 	path := opened.Header().Get("Location") + "api/project"
 	input := project.AddSceneInput{BaseRevision: saved.Revision, Name: "  Dye Garden ", Width: 20, Height: 18}
 	added := post(path+"/scenes", input)
-	var next project.AddedScene
+	var next project.SceneResult
 	if err := json.Unmarshal(added.Body.Bytes(), &next); err != nil || added.Code != http.StatusCreated || len(next.Project.Scenes) != 1 {
 		t.Fatalf("create scene: %d %s (%v)", added.Code, added.Body, err)
 	}

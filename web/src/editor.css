@@ -284,7 +284,7 @@ h1 {
   padding: 4px;
   width: 248px;
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 1px solid var(--scene-border, var(--border));
   border-radius: 5px;
   user-select: none;
   touch-action: none;
@@ -292,9 +292,9 @@ h1 {
   text-align: left;
 }
 .card[aria-pressed="true"] {
-  border-color: var(--accent);
+  border-color: var(--scene-border, var(--accent));
   box-shadow:
-    0 0 0 1px var(--accent),
+    0 0 0 1px var(--scene-border, var(--accent)),
     0 4px 10px #0004;
 }
 .scene-card-header {
@@ -628,6 +628,7 @@ footer {
 }
 #new-project-dialog,
 #new-scene-dialog,
+#scene-action-dialog,
 #confirm-project-close {
   width: min(420px, calc(100% - 28px));
   padding: 20px;
@@ -638,6 +639,7 @@ footer {
 }
 #new-project-dialog::backdrop,
 #new-scene-dialog::backdrop,
+#scene-action-dialog::backdrop,
 #confirm-project-close::backdrop {
   background: #000a;
 }
@@ -803,4 +805,89 @@ footer {
 }
 #new-scene-status {
   overflow-wrap: anywhere;
+}
+
+.scene-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.scene-list-item .row {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.scene-options {
+  min-width: 28px;
+  min-height: 32px;
+  padding: 0;
+  color: var(--muted);
+  border-color: transparent;
+  background: transparent;
+}
+#scene-context-menu:not([hidden]) {
+  position: fixed;
+  z-index: 12;
+  display: grid;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 6px 18px #0006;
+}
+#scene-context-menu button {
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+#scene-context-menu button:hover {
+  background: var(--selected);
+}
+#scene-context-menu .scene-delete-menu {
+  color: var(--draft);
+}
+#scene-action-form,
+#scene-action-name-field:not([hidden]) {
+  display: grid;
+  gap: 10px;
+}
+#scene-action-description {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+#scene-action-message {
+  overflow-wrap: anywhere;
+}
+#apply-scene-action.danger {
+  background: var(--draft);
+}
+
+
+.scene-color-chips {
+  display: flex;
+  gap: 2px;
+  padding: 2px 0 5px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+#scene-context-menu .scene-color-chips button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+.scene-color-chips button::before {
+  content: "";
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--chip-color, transparent);
+  border: 1px solid var(--muted);
+}
+.scene-color-chips button[aria-checked="true"]::before {
+  outline: 1px solid var(--text);
+  outline-offset: 2px;
 }

@@ -45,6 +45,8 @@ Keep referenced PNGs beside `project.json`. Scene dimensions are in 8-pixel tile
 
 In the Navigator, choose **+** next to **Scenes**, enter a name and dimensions in tiles, and select **Create scene**. Cartquilt saves the blank scene and selects its card on the world map. Double-click the card or choose **Open scene** in the Inspector to see the grid. Use the search icon next to **Scenes** to filter the list by name.
 
+Right-click a scene in the Navigator or on the world map to rename it, duplicate its saved contents, change its border color, or delete it. The Navigator’s **⋯** button and **Shift+F10** open the same menu. Cartquilt asks for confirmation before deleting a scene.
+
 ## Development and roadmap
 
 For local development, run `npm run dev` from the repository root and open [the Vite editor](http://127.0.0.1:5173). It starts Air and Vite in the same terminal. Press Ctrl+C to stop both. The first run downloads the pinned Air version and may fetch its Go toolchain.

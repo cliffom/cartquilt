@@ -27,25 +27,15 @@ func projectRoutes(path string, files http.Handler) http.Handler {
 			return
 		}
 		added, err := project.AddScene(path, input)
-		if err != nil {
-			status := http.StatusUnprocessableEntity
-			switch {
-			case errors.Is(err, project.ErrInvalidInput):
-				status = http.StatusBadRequest
-			case errors.Is(err, project.ErrProjectBusy):
-				status = http.StatusConflict
-			case errors.Is(err, project.ErrStaleRevision):
-				status = http.StatusConflict
-				err = errors.New("The project changed on disk. Refresh the scene list before trying again.")
-				w.Header().Set("Cartquilt-Conflict", "stale-revision")
-			}
-			http.Error(w, err.Error(), status)
+		writeSceneResult(w, added, err, http.StatusCreated)
+	})
+	mux.HandleFunc("POST /api/project/scenes/{scene}/actions", func(w http.ResponseWriter, r *http.Request) {
+		var input project.SceneActionInput
+		if !decodeLocalRequest(w, r, &input) {
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(added)
+		updated, err := project.ApplySceneAction(path, r.PathValue("scene"), input)
+		writeSceneResult(w, updated, err, http.StatusOK)
 	})
 	mux.HandleFunc("GET /assets/{name}", func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
@@ -72,4 +62,28 @@ func hasAsset(scenes []project.Scene, name string) bool {
 		}
 	}
 	return false
+}
+
+func writeSceneResult(w http.ResponseWriter, updated project.SceneResult, err error, success int) {
+	if err != nil {
+		status := http.StatusUnprocessableEntity
+		switch {
+		case errors.Is(err, project.ErrInvalidInput):
+			status = http.StatusBadRequest
+		case errors.Is(err, project.ErrSceneNotFound):
+			status = http.StatusNotFound
+		case errors.Is(err, project.ErrProjectBusy):
+			status = http.StatusConflict
+		case errors.Is(err, project.ErrStaleRevision):
+			status = http.StatusConflict
+			err = errors.New("The project changed on disk. Refresh the scene list before trying again.")
+			w.Header().Set("Cartquilt-Conflict", "stale-revision")
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(success)
+	json.NewEncoder(w).Encode(updated)
 }

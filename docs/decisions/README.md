@@ -58,6 +58,8 @@ Bring supported reimport changes through the proposal and revision checks in D02
 
 **Accepted · Architecture · 2026-11-27 · M1/M2.** Give each blank scene a stable ID, tile dimensions, and an initial world position. An empty artwork field displays a tile grid. Scene creation appends to the submitted project revision under a per-manifest file lock and publishes the updated manifest by rename. A stale tab can refresh additions while retaining its scene drafts. Verify that another tab and a fresh service can read the same saved scene.
 
+Rename, duplicate, border color, and delete use the same manifest write path. A duplicate has a new scene ID and position and copies the saved scene, including its asset references. Rename and border color preserve the active scene's actor draft and undo history. Delete requires confirmation in the editor. Border color is optional scene metadata for the world map.
+
 ### D10 · Scene card counts and sprite budgets
 
 **Accepted · Interaction design · 2026-11-27 · M2/M5.** Show scene dimensions in tiles and counts for actors, sprite tiles, and triggers on each world-map card. Estimate sprite tiles from actor dimensions in 8×8 cells and count each referenced sprite once. For a single-screen scene, also estimate the number of 8×8 hardware sprites across all placed actors and the peak on any scanline. Flag estimates above 40 total or 10 on a scanline. These checks cover static placements. Scrolling scenes need a camera-aware check. Set engine budgets for actors, sprite tiles, and triggers using the compiled runtime's allocation and behavior. [Game Boy object attribute memory](https://github.com/gbdev/pandocs/blob/master/src/OAM.md)

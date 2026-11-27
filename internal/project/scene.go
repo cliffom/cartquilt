@@ -24,20 +24,46 @@ type AddSceneInput struct {
 	Height       int    `json:"height"`
 }
 
-type AddedScene struct {
+type SceneResult struct {
 	Snapshot
 	SceneID string `json:"sceneId"`
 }
 
-func AddScene(path string, input AddSceneInput) (AddedScene, error) {
+func AddScene(path string, input AddSceneInput) (SceneResult, error) {
 	name := strings.TrimSpace(input.Name)
 	if name == "" || input.Width < 1 || input.Width > 1024 || input.Height < 1 || input.Height > 1024 || input.BaseRevision == "" {
-		return AddedScene{}, fmt.Errorf("%w: enter a scene name and dimensions from 1 to 1024 tiles", ErrInvalidInput)
+		return SceneResult{}, fmt.Errorf("%w: enter a scene name and dimensions from 1 to 1024 tiles", ErrInvalidInput)
 	}
 
+	return writeScenes(path, input.BaseRevision, func(current Project, entries []json.RawMessage) ([]json.RawMessage, string, error) {
+		scene := Scene{
+			ID:   newSceneID(),
+			Name: name, Width: input.Width, Height: input.Height,
+			World: nextScenePosition(current), Actors: []Actor{},
+		}
+		entry, err := json.Marshal(scene)
+		return append(entries, entry), scene.ID, err
+	})
+}
+
+func nextScenePosition(current Project) Point {
+	last := -280
+	for _, scene := range current.Scenes {
+		last = max(last, scene.World.X)
+	}
+	return Point{X: last + 280}
+}
+
+func newSceneID() string {
+	var id [16]byte
+	rand.Read(id[:])
+	return fmt.Sprintf("scene-%x", id)
+}
+
+func writeScenes(path, baseRevision string, edit func(Project, []json.RawMessage) ([]json.RawMessage, string, error)) (SceneResult, error) {
 	path, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return AddedScene{}, err
+		return SceneResult{}, err
 	}
 	dir := filepath.Dir(path)
 	// Keep the lock on a separate inode so it remains valid when the manifest is replaced.
@@ -45,83 +71,69 @@ func AddScene(path string, input AddSceneInput) (AddedScene, error) {
 	defer lock.Close()
 	locked, err := lock.TryLock()
 	if err != nil {
-		return AddedScene{}, err
+		return SceneResult{}, err
 	}
 	if !locked {
-		return AddedScene{}, ErrProjectBusy
+		return SceneResult{}, ErrProjectBusy
 	}
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return AddedScene{}, err
+		return SceneResult{}, err
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return AddedScene{}, err
+		return SceneResult{}, err
 	}
 	current, err := decodeSnapshot(data)
 	if err != nil {
-		return AddedScene{}, err
+		return SceneResult{}, err
 	}
-	if current.Revision != input.BaseRevision {
-		return AddedScene{}, ErrStaleRevision
+	if current.Revision != baseRevision {
+		return SceneResult{}, ErrStaleRevision
 	}
 
-	last := -280
-	for _, scene := range current.Project.Scenes {
-		last = max(last, scene.World.X)
+	// Preserve additional manifest fields and the full JSON of unchanged scenes.
+	var manifest map[string]json.RawMessage
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return SceneResult{}, err
 	}
-	var id [16]byte
-	rand.Read(id[:])
-	scene := Scene{
-		ID:   fmt.Sprintf("scene-%x", id),
-		Name: name, Width: input.Width, Height: input.Height,
-		World: Point{X: last + 280}, Actors: []Actor{},
+	var entries []json.RawMessage
+	if err := json.Unmarshal(manifest["scenes"], &entries); err != nil {
+		return SceneResult{}, err
 	}
-	updated, err := appendScene(data, scene)
+	entries, id, err := edit(current.Project, entries)
 	if err != nil {
-		return AddedScene{}, err
+		return SceneResult{}, err
 	}
+	manifest["scenes"], err = json.Marshal(entries)
+	if err != nil {
+		return SceneResult{}, err
+	}
+	updated, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return SceneResult{}, err
+	}
+	updated = append(updated, '\n')
+
 	next, err := decodeSnapshot(updated)
 	if err != nil {
-		return AddedScene{}, err
+		return SceneResult{}, err
 	}
 	temp, err := writeCandidate(dir, updated, info.Mode().Perm())
 	if err != nil {
-		return AddedScene{}, err
+		return SceneResult{}, err
 	}
 	defer os.Remove(temp)
 	latest, err := Load(path)
 	if err != nil {
-		return AddedScene{}, err
+		return SceneResult{}, err
 	}
 	if latest.Revision != current.Revision {
-		return AddedScene{}, ErrStaleRevision
+		return SceneResult{}, ErrStaleRevision
 	}
 	if err := os.Rename(temp, path); err != nil {
-		return AddedScene{}, err
+		return SceneResult{}, err
 	}
-	return AddedScene{Snapshot: next, SceneID: scene.ID}, nil
-}
-
-func appendScene(data []byte, scene Scene) ([]byte, error) {
-	// Preserve additional manifest fields and the full JSON of existing scenes.
-	var manifest map[string]json.RawMessage
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, err
-	}
-	var scenes []json.RawMessage
-	if err := json.Unmarshal(manifest["scenes"], &scenes); err != nil {
-		return nil, err
-	}
-	entry, err := json.Marshal(scene)
-	if err != nil {
-		return nil, err
-	}
-	manifest["scenes"], err = json.Marshal(append(scenes, entry))
-	if err != nil {
-		return nil, err
-	}
-	updated, err := json.MarshalIndent(manifest, "", "  ")
-	return append(updated, '\n'), err
+	return SceneResult{Snapshot: next, SceneID: id}, nil
 }

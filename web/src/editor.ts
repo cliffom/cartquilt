@@ -1,4 +1,6 @@
 import "./editor.css";
+import { button, el, get } from "./dom.js";
+import { setupSceneActions } from "./scene-actions.js";
 import { decode, Workspace, type Scene, type Point } from "./model.js";
 import { gbcSpriteLimits, sceneMetrics } from "./scene-metrics.js";
 
@@ -50,22 +52,6 @@ async function accessProject(path: string, name?: string) {
   return { url, name: project.name };
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = "") {
-  const node = document.createElement(tag);
-  node.className = cls;
-  node.textContent = text;
-  return node;
-}
-function get<T extends HTMLElement = HTMLElement>(id: string | undefined) {
-  const node = id && document.getElementById(id);
-  if (!node) throw Error(`Missing editor element: ${id}`);
-  return node as T;
-}
-function button(label: string, act: () => void, cls = "") {
-  const node = el("button", cls, label);
-  node.onclick = act;
-  return node;
-}
 function img(file: string, cls = "") {
   const node = el("img", cls);
   node.src = `./assets/${file}`;
@@ -498,6 +484,24 @@ async function start() {
     }
   });
   get("add-scene").onclick = newScene;
+  const sceneActions = setupSceneActions(w, (action, id, surface) => {
+    if (action === "duplicate") {
+      w.selected = id;
+      w.desk = "world";
+      showSceneGroup(true);
+      showSceneSearch(false);
+      closePanel(false);
+    }
+    render();
+    if (action === "duplicate") fit();
+    const root = surface === "world" || action === "duplicate" ? plane : get("scenes");
+    const focusId = action === "delete" ? w.selected : id;
+    const scene = Array.from(root.querySelectorAll<HTMLButtonElement>("button[data-id]")).find(
+      (entry) => entry.dataset.id === focusId,
+    );
+    const fallback = surface === "navigator" ? get("add-scene") : canvas;
+    (scene ?? fallback).focus({ preventScroll: true });
+  });
   function sceneMode() {
     return w.desk === "scene";
   }
@@ -583,7 +587,18 @@ async function start() {
       row.append(s.art ? img(s.art) : el("span", "blank-scene-thumbnail"), s.name);
       if (w.documentFor(s.id).dirty) row.append(el("span", "badge", "Draft"));
       pressed(row, w.selected === s.id);
-      scenes.append(row);
+      row.dataset.id = s.id;
+      sceneActions.attach(row, s.id, "navigator");
+      const options = button(
+        "⋯",
+        () => sceneActions.show(s.id, "navigator", options),
+        "scene-options",
+      );
+      options.setAttribute("aria-label", `Actions for ${s.name}`);
+      options.setAttribute("aria-haspopup", "menu");
+      const item = el("div", "scene-list-item");
+      item.append(row, options);
+      scenes.append(item);
     }
     if (!matches.length)
       scenes.append(
@@ -820,6 +835,8 @@ async function start() {
       const s = d.scene,
         card = el("button", "card");
       card.dataset.id = s.id;
+      if (s.color) card.style.setProperty("--scene-border", s.color);
+      sceneActions.attach(card, s.id, "world");
       pressed(card, s.id === w.selected);
       card.onclick = () => selectScene(s.id);
       card.ondblclick = () => open(s.id);

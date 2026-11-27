@@ -140,3 +140,31 @@ test("sprite tile estimates count shared assets once and hardware sprites per pl
   assert.deepEqual(metrics.gbc, { hardwareSprites: 24, peakScanline: 12, overBudget: true });
   assert.equal(sceneMetrics({ ...scene, width: 21 }).gbc, undefined);
 });
+
+test("scene metadata updates preserve actor undo and redo history", () => {
+  const workspace = new Workspace(decode(response));
+  const willow = workspace.active;
+  willow.apply({ type: "moveActor", actor: "courier", axis: "x", value: 81 });
+  const renamed = structuredClone(response);
+  renamed.revision = "a".repeat(64);
+  renamed.project.scenes[0].name = "Reed Bank";
+  workspace.acceptSceneAction(decode(renamed), "willow-bank", "rename");
+  assert.equal(workspace.active, willow);
+  assert.equal(willow.scene.actors[0].x, 81);
+  willow.undo();
+  assert.equal(willow.scene.name, "Reed Bank");
+  assert.equal(willow.dirty, false);
+
+  renamed.project.scenes[0].color = "#a1b2c3";
+  workspace.acceptSceneAction(decode(renamed), "willow-bank", "color");
+  willow.redo();
+  assert.equal(willow.scene.color, "#a1b2c3");
+  assert.equal(willow.scene.actors[0].x, 81);
+
+  workspace.desk = "scene";
+  renamed.project.scenes.shift();
+  workspace.acceptSceneAction(decode(renamed), "willow-bank", "delete");
+  assert.equal(workspace.desk, "world");
+  assert.equal(workspace.selected, "loom-yard");
+  assert.equal(workspace.documents.has("willow-bank"), false);
+});
