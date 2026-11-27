@@ -6,3 +6,4 @@
 - Change the Go contract, TypeScript decoder, and contract tests together. Use stable IDs and validate before attaching a project to the UI.
 - Use shared CSS tokens and nearest-neighbor artwork. Preserve keyboard equivalents, visible focus, field-level feedback, and text draft indicators. Keep branding outside scene artwork.
 - Use original examples and project terminology. Run `npm run format` after editing Go or TypeScript, then `npm run check` before handing off a change. Exercise desk navigation in a browser when changing interaction or layout.
+- Track milestone evidence in [ROADMAP.md](ROADMAP.md). Record consequential architecture, interaction, and distribution choices in the [decision log](docs/decisions/README.md), distinguishing proposals from accepted decisions.

@@ -45,4 +45,4 @@ Run `npm run lint` for Go vet, Biome’s recommended lint rules, and strict Type
 
 Run `npm test` to build the TypeScript client and check the Go service, the project data exchanged with the browser, and scene undo/redo. The [engineering guide](AGENTS.md) describes how the service, scene documents, and workspace share responsibility.
 
-Saving edits to disk, building playable output, and authoring through a revision-aware Codex plugin are planned. See the [roadmap](ROADMAP.md) for the workflows each will support.
+Saving edits to disk, building playable output, and authoring through a revision-aware Codex plugin are planned. Follow the [milestone roadmap](ROADMAP.md), [plugin delivery plan](docs/codex-plugin.md), and [decision log](docs/decisions/README.md) for the next deliverables and how to verify them.
