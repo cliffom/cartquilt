@@ -1,9 +1,10 @@
-package main
+package editor
 
 import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"mime"
 	"net"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"cartquilt/internal/project"
 )
 
 var projectSlugSeparators = regexp.MustCompile(`[^a-z0-9]+`)
@@ -26,20 +29,21 @@ func projectSlug(name string) string {
 	return slug
 }
 
-func workspaceServer(initial *Snapshot, dir string) http.Handler {
+func New(initial *project.Saved, web fs.FS) http.Handler {
+	editorFiles := http.FileServerFS(web)
 	mux := http.NewServeMux()
 	type sessionProject struct {
 		path    string
 		handler http.Handler
 	}
 	var projects sync.Map
-	serveProject := func(w http.ResponseWriter, project savedProject, status int) {
-		path := project.Path
+	serveProject := func(w http.ResponseWriter, saved project.Saved, status int) {
+		path := saved.Path
 		if resolved, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
 			path = filepath.Join(resolved, filepath.Base(path))
 		}
-		entry := sessionProject{path: path, handler: editor(project.Snapshot, filepath.Dir(project.Path))}
-		base := projectSlug(project.Project.Name)
+		entry := sessionProject{path: path, handler: projectRoutes(saved.Snapshot, filepath.Dir(saved.Path), editorFiles)}
+		base := projectSlug(saved.Project.Name)
 		slug := base
 		for suffix := 2; ; suffix++ {
 			previous, exists := projects.LoadOrStore(slug, entry)
@@ -56,7 +60,7 @@ func workspaceServer(initial *Snapshot, dir string) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(status)
-		json.NewEncoder(w).Encode(project)
+		json.NewEncoder(w).Encode(saved)
 	}
 	mux.HandleFunc("GET /projects/{slug}/", func(w http.ResponseWriter, r *http.Request) {
 		slug := r.PathValue("slug")
@@ -72,34 +76,34 @@ func workspaceServer(initial *Snapshot, dir string) http.Handler {
 		http.StripPrefix("/projects/"+slug, handler.(sessionProject).handler).ServeHTTP(w, r)
 	})
 	mux.HandleFunc("POST /api/projects", func(w http.ResponseWriter, r *http.Request) {
-		var input createInput
+		var input project.CreateInput
 		if !decodeLocalRequest(w, r, &input) {
 			return
 		}
-		project, err := createProject(input)
+		saved, err := project.Create(input)
 		if err != nil {
 			status := http.StatusUnprocessableEntity
 			switch {
-			case errors.Is(err, errInvalidProjectInput):
+			case errors.Is(err, project.ErrInvalidInput):
 				status = http.StatusBadRequest
-			case errors.Is(err, errProjectExists):
+			case errors.Is(err, project.ErrExists):
 				status = http.StatusConflict
 			}
 			http.Error(w, err.Error(), status)
 			return
 		}
-		serveProject(w, project, http.StatusCreated)
+		serveProject(w, saved, http.StatusCreated)
 	})
 	mux.HandleFunc("POST /api/project-open", func(w http.ResponseWriter, r *http.Request) {
-		var input openInput
+		var input project.OpenInput
 		if !decodeLocalRequest(w, r, &input) {
 			return
 		}
-		project, err := openProject(input)
+		saved, err := project.Open(input)
 		if err != nil {
 			status := http.StatusUnprocessableEntity
 			switch {
-			case errors.Is(err, errInvalidProjectInput):
+			case errors.Is(err, project.ErrInvalidInput):
 				status = http.StatusBadRequest
 			case errors.Is(err, os.ErrNotExist):
 				status = http.StatusNotFound
@@ -107,7 +111,7 @@ func workspaceServer(initial *Snapshot, dir string) http.Handler {
 			http.Error(w, err.Error(), status)
 			return
 		}
-		serveProject(w, project, http.StatusOK)
+		serveProject(w, saved, http.StatusOK)
 	})
 	mux.HandleFunc("POST /api/project-folder-picker", projectFolderPicker())
 	if initial == nil {
@@ -117,7 +121,7 @@ func workspaceServer(initial *Snapshot, dir string) http.Handler {
 		})
 		mux.Handle("GET /", editorFiles)
 	} else {
-		mux.Handle("/", editor(*initial, dir))
+		mux.Handle("/", projectRoutes(initial.Snapshot, filepath.Dir(initial.Path), editorFiles))
 	}
 	return mux
 }

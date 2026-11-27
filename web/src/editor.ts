@@ -1,3 +1,4 @@
+import "./editor.css";
 import { decode, Workspace, type Scene, type Point } from "./model.js";
 
 const launcherPreference = "cartquilt.showLauncher";

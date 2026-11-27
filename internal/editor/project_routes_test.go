@@ -1,4 +1,4 @@
-package main
+package editor
 
 import (
 	"encoding/json"
@@ -7,21 +7,25 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
+
+	"cartquilt/internal/project"
 )
 
 func TestSnapshotResponse(t *testing.T) {
 	dir := filepath.Join("..", "..", "examples", "threadvale")
-	snap, err := loadProject(filepath.Join(dir, "project.json"))
+	path := filepath.Join(dir, "project.json")
+	snap, err := project.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := editor(snap, dir)
+	handler := New(&project.Saved{Snapshot: snap, Path: path}, fstest.MapFS{})
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/api/project", nil))
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/json" {
 		t.Fatal(rec.Result())
 	}
-	var got Snapshot
+	var got project.Snapshot
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || got.Revision != snap.Revision || len(got.Project.Scenes) != 2 {
 		t.Fatalf("unexpected response: %s", rec.Body.String())
 	}

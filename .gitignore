@@ -1,5 +1,6 @@
 node_modules/
 web/public/js/
+web/dist/
 .DS_Store
 /.local/
 /cartquilt

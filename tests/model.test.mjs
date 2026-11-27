@@ -4,13 +4,13 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decode, SceneDocument, Workspace } from "../web/public/js/model.js";
+import { decode, SceneDocument, Workspace } from "../.local/test-js/model.js";
 
 const temp = mkdtempSync(join(tmpdir(), "cartquilt-contract-"));
 let response;
 try {
   const output = join(temp, "response.json");
-  execFileSync("go", ["test", "-count=1", "-run", "^TestSnapshotResponse$", "./cmd/cartquilt"], {
+  execFileSync("go", ["test", "-count=1", "-run", "^TestSnapshotResponse$", "./internal/editor"], {
     env: { ...process.env, CARTQUILT_CONTRACT_OUTPUT: output },
   });
   response = JSON.parse(readFileSync(output, "utf8"));

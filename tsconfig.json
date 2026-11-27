@@ -8,7 +8,8 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "rootDir": "web/src",
-    "outDir": "web/public/js",
+    "types": ["vite/client"],
+    "outDir": ".local/test-js",
     "noEmitOnError": true
   },
   "include": ["web/src"]

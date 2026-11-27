@@ -6,7 +6,7 @@ Cartquilt is a local-first Game Boy Color world and scene editor designed for de
 
 ## Get started
 
-Install Go 1.25 or later and Node.js 20 or later with npm. From the repository root, run:
+Install Go 1.25 or later and Node.js 20.19+ on the Node 20 line, or Node.js 22.12+ with npm. From the repository root, run:
 
 ```sh
 npm ci
@@ -44,6 +44,16 @@ go run ./cmd/cartquilt -project path/to/project.json
 Keep referenced PNGs beside `project.json`. Scene dimensions are in 8-pixel tiles. Actor positions and sizes are in pixels, measured from the scene’s top-left corner. You can also [create a project from Codex](docs/codex-plugin.md#create-a-project).
 
 ## Development and roadmap
+
+For local development, run `npm run dev` from the repository root and open [the Vite editor](http://127.0.0.1:5173). It starts Air and Vite in the same terminal. Press Ctrl+C to stop both. The first run downloads the pinned Air version and may fetch its Go toolchain.
+
+Air rebuilds and restarts Go on source changes behind the same Vite address. A successful Go rebuild leaves the page open. Reopen a project from **Recent projects** if refreshing after a rebuild invalidates its session URL. CSS updates in place, and TypeScript or HTML changes reload the page and clear tab-only edits.
+
+Pass `npm run dev -- -project examples/threadvale/project.json` to start with the sample. Set `CARTQUILT_SERVICE_PORT` when running `npm run dev` to use an existing Go service with its own lifecycle.
+
+Use `npm start` for a single-server setup. It builds the frontend into `web/dist/` and serves it from Go alongside the project API.
+
+The Go executable lives in [cmd/cartquilt](cmd/cartquilt/). [internal/project](internal/project/) owns the project format, validation, and file operations. The [HTTP editor](internal/editor/) and [MCP server](internal/mcpserver/) share that package.
 
 From the repository root, run `npm run format` to apply gofmt to Go code and Biome to TypeScript and JavaScript source, tests, and tooling. Use `npm run format:check` for a read-only formatting check.
 

@@ -48,6 +48,12 @@ Bring supported reimport changes through the proposal and revision checks in D02
 
 **Accepted · 2026-11-27.** Use the saved project folder or JSON path to locate a project in the browser and MCP. The saved ID identifies the project and the revision identifies its current content. Readable browser routes belong to one running server. Verify that an independent server and MCP session can load the same saved project by path.
 
+### D08 · Project services and frontend build
+
+**Accepted · Architecture · 2026-11-27 · M0.** Keep saved project data and filesystem operations in `internal/project`. HTTP and MCP packages adapt those operations to their respective transports. The executable wires them together. Vite serves frontend source during development and proxies project requests to the loopback Go service. The production build is served alongside the API by Go. Verify the same project workflow through both frontend entry points and the MCP transport.
+
+`npm run dev` starts Vite and a pinned Air watcher. Air rebuilds the Go service on source changes and retains the same backend port throughout the development session. Vite keeps the browser open during Go restarts so in-tab edits remain available.
+
 ### Decisions due before dependent work
 
 | Before | Decide | Evidence needed |

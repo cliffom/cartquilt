@@ -1,4 +1,4 @@
-package main
+package project
 
 import (
 	"crypto/rand"
@@ -11,35 +11,35 @@ import (
 )
 
 var (
-	errInvalidProjectInput = errors.New("invalid project input")
-	errProjectExists       = errors.New("project folder already exists")
+	ErrInvalidInput = errors.New("invalid project input")
+	ErrExists       = errors.New("project folder already exists")
 )
 
-type createInput struct {
+type CreateInput struct {
 	Name string `json:"name" jsonschema:"Display name for the new project"`
 	Path string `json:"path" jsonschema:"Absolute local path for a new project folder whose parent already exists"`
 }
 
-type savedProject struct {
+type Saved struct {
 	Snapshot
 	Path string `json:"path" jsonschema:"Absolute path to the saved project.json file"`
 }
 
-func createProject(input createInput) (savedProject, error) {
+func Create(input CreateInput) (Saved, error) {
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
-		return savedProject{}, fmt.Errorf("%w: enter a project name", errInvalidProjectInput)
+		return Saved{}, fmt.Errorf("%w: enter a project name", ErrInvalidInput)
 	}
 	if !filepath.IsAbs(input.Path) {
-		return savedProject{}, fmt.Errorf("%w: enter the absolute path to a new project folder", errInvalidProjectInput)
+		return Saved{}, fmt.Errorf("%w: enter the absolute path to a new project folder", ErrInvalidInput)
 	}
 
 	dir := filepath.Clean(input.Path)
 	if err := os.Mkdir(dir, 0700); err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return savedProject{}, fmt.Errorf("%w: %s", errProjectExists, dir)
+			return Saved{}, fmt.Errorf("%w: %s", ErrExists, dir)
 		}
-		return savedProject{}, fmt.Errorf("create project folder (its parent must exist): %w", err)
+		return Saved{}, fmt.Errorf("create project folder (its parent must exist): %w", err)
 	}
 
 	var id [16]byte
@@ -56,28 +56,28 @@ func createProject(input createInput) (savedProject, error) {
 	return result, err
 }
 
-func saveNewProject(dir string, project Project) (savedProject, error) {
+func saveNewProject(dir string, project Project) (Saved, error) {
 	data, err := json.MarshalIndent(project, "", "  ")
 	if err != nil {
-		return savedProject{}, err
+		return Saved{}, err
 	}
 	temp, err := os.CreateTemp(dir, ".project-*")
 	if err != nil {
-		return savedProject{}, err
+		return Saved{}, err
 	}
 	defer os.Remove(temp.Name())
 	_, writeErr := temp.Write(append(data, '\n'))
 	if err := errors.Join(writeErr, temp.Close()); err != nil {
-		return savedProject{}, err
+		return Saved{}, err
 	}
-	snapshot, err := loadProject(temp.Name())
+	snapshot, err := Load(temp.Name())
 	if err != nil {
-		return savedProject{}, err
+		return Saved{}, err
 	}
 	path := filepath.Join(dir, "project.json")
 	// Publish a complete file without replacing any file already at the destination.
 	if err := os.Link(temp.Name(), path); err != nil {
-		return savedProject{}, err
+		return Saved{}, err
 	}
-	return savedProject{Snapshot: snapshot, Path: path}, nil
+	return Saved{Snapshot: snapshot, Path: path}, nil
 }

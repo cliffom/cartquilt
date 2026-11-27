@@ -1,6 +1,7 @@
 # Working on Cartquilt
 
-- Keep Go service code and its tests in `cmd/cartquilt/`. Run the service from the repository root so relative project and web asset paths resolve consistently.
+- Keep executable startup in `cmd/cartquilt/`. Keep project data, validation, and filesystem operations in `internal/project/`. Use `internal/editor/` for browser HTTP routes and `internal/mcpserver/` for plugin tools. Keep adapter tests with their respective package.
+- Run the service from the repository root so relative project and web asset paths resolve consistently. Use `npm run dev` for Air's Go reload and Vite's frontend reload. Go serves the Vite production build from `web/dist/`.
 - Keep the Go service on loopback. It owns saved data and revision identity. Load examples through the ordinary project loader.
 - Keep scene baselines, working copies, operation validation, and undo/redo in SceneDocument. Keep navigation, object selection, card layout, and camera in Workspace. Browser views dispatch operations. Future plugin edits must use the same semantics.
 - Change the Go contract, TypeScript decoder, and contract tests together. Use stable IDs and validate before attaching a project to the UI.
