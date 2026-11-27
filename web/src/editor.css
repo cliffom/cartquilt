@@ -891,3 +891,12 @@ footer {
   outline: 1px solid var(--text);
   outline-offset: 2px;
 }
+
+.editor-status-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#retry-layout-save {
+  flex-shrink: 0;
+}

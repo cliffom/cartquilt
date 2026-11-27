@@ -1,6 +1,6 @@
 import "./editor.css";
 import { button, el, get } from "./dom.js";
-import { setupSceneActions } from "./scene-actions.js";
+import { createSceneWriteQueue, setupSceneActions, type QueueSceneWrite } from "./scene-actions.js";
 import { decode, Workspace, type Scene, type Point } from "./model.js";
 import { gbcSpriteLimits, sceneMetrics } from "./scene-metrics.js";
 
@@ -329,7 +329,11 @@ function showLauncher(message = "") {
   get("project-launcher").hidden = false;
 }
 
-function setupSceneCreation(w: Workspace, refreshWorld: (newScene?: string) => void) {
+function setupSceneCreation(
+  w: Workspace,
+  queueWrite: QueueSceneWrite,
+  refreshWorld: (newScene?: string) => void,
+) {
   const dialog = get<HTMLDialogElement>("new-scene-dialog");
   const form = get<HTMLFormElement>("new-scene-form");
   const name = get<HTMLInputElement>("scene-name");
@@ -355,12 +359,14 @@ function setupSceneCreation(w: Workspace, refreshWorld: (newScene?: string) => v
   refresh.onclick = async () => {
     busy(true);
     try {
-      const response = await fetch("./api/project");
-      if (!response.ok) throw Error("Could not read the saved scene list.");
-      w.acceptSceneAdditions(decode(await response.json()));
-      refreshWorld();
-      refresh.hidden = true;
-      message.textContent = "Scene list refreshed.";
+      await queueWrite(async () => {
+        const response = await fetch("./api/project");
+        if (!response.ok) throw Error("Could not read the saved scene list.");
+        w.acceptSceneAdditions(decode(await response.json()));
+        refreshWorld();
+        refresh.hidden = true;
+        message.textContent = "Scene list refreshed.";
+      });
     } catch (error) {
       message.textContent = (error as Error).message;
     } finally {
@@ -374,33 +380,35 @@ function setupSceneCreation(w: Workspace, refreshWorld: (newScene?: string) => v
     busy(true);
     message.textContent = "Creating scene…";
     try {
-      const response = await fetch("./api/project/scenes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          baseRevision: w.snapshot.revision,
-          name: name.value,
-          width: width.valueAsNumber,
-          height: height.valueAsNumber,
-        }),
+      await queueWrite(async () => {
+        const response = await fetch("./api/project/scenes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            baseRevision: w.snapshot.revision,
+            name: name.value,
+            width: width.valueAsNumber,
+            height: height.valueAsNumber,
+          }),
+        });
+        if (!response.ok) {
+          refresh.hidden = response.headers.get("Cartquilt-Conflict") !== "stale-revision";
+          throw Error((await response.text()).trim());
+        }
+        const added = await response.json();
+        const next = decode(added);
+        if (
+          !next.project.scenes
+            .slice(w.snapshot.project.scenes.length)
+            .some((scene) => scene.id === added.sceneId)
+        )
+          throw Error(
+            "The service did not return the new scene. Reopen the project to check what was saved.",
+          );
+        w.acceptSceneAdditions(next);
+        dialog.close();
+        refreshWorld(added.sceneId);
       });
-      if (!response.ok) {
-        refresh.hidden = response.headers.get("Cartquilt-Conflict") !== "stale-revision";
-        throw Error((await response.text()).trim());
-      }
-      const added = await response.json();
-      const next = decode(added);
-      if (
-        !next.project.scenes
-          .slice(w.snapshot.project.scenes.length)
-          .some((scene) => scene.id === added.sceneId)
-      )
-        throw Error(
-          "The service did not return the new scene. Reopen the project to check what was saved.",
-        );
-      w.acceptSceneAdditions(next);
-      dialog.close();
-      refreshWorld(added.sceneId);
     } catch (error) {
       message.textContent = (error as Error).message;
     } finally {
@@ -469,7 +477,8 @@ async function start() {
       close.focus();
     };
   });
-  const newScene = setupSceneCreation(w, (id) => {
+  const queueWrite = createSceneWriteQueue();
+  const newScene = setupSceneCreation(w, queueWrite, (id) => {
     if (id) {
       w.selected = id;
       w.desk = "world";
@@ -484,7 +493,7 @@ async function start() {
     }
   });
   get("add-scene").onclick = newScene;
-  const sceneActions = setupSceneActions(w, (action, id, surface) => {
+  const sceneActions = setupSceneActions(w, queueWrite, (action, id, surface) => {
     if (action === "duplicate") {
       w.selected = id;
       w.desk = "world";
@@ -763,6 +772,70 @@ async function start() {
       if (!sceneMode()) details.append(button("Open scene", () => open(s.id), "primary"));
     }
   }
+  // Capture completed moves. An in-flight save never replaces a newer position in the tab.
+  const pendingPositions = new Map<string, Point>();
+  const retryLayout = get<HTMLButtonElement>("retry-layout-save");
+  let savingLayout = false;
+  let layoutError = "";
+  let layoutConflict = false;
+
+  function savePosition(id: string) {
+    const current = w.positionFor(id);
+    const rounded = { x: Math.round(current.x), y: Math.round(current.y) };
+    w.positions.set(id, rounded);
+    pendingPositions.set(id, rounded);
+    positionCards();
+    status();
+    if (!layoutError) void flushPositions();
+  }
+
+  async function flushPositions() {
+    if (savingLayout || layoutConflict || !pendingPositions.size) return;
+    savingLayout = true;
+    layoutError = "";
+    status();
+    try {
+      for (const [id, world] of pendingPositions) {
+        await queueWrite(async () => {
+          const scene = w.snapshot.project.scenes.find((candidate) => candidate.id === id);
+          if (scene && (scene.world.x !== world.x || scene.world.y !== world.y)) {
+            const response = await fetch(`./api/project/scenes/${id}/actions`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                baseRevision: w.snapshot.revision,
+                action: "position",
+                world,
+              }),
+            });
+            if (response.headers.get("Cartquilt-Conflict") === "stale-revision") {
+              layoutConflict = true;
+              throw Error("Layout is unsaved. Reopen the project to load the changes on disk.");
+            }
+            if (!response.ok) throw Error("Layout is unsaved.");
+            w.acceptSceneAction(decode(await response.json()), id, "position");
+          }
+        });
+        // A second drop may have updated this entry while the request was in flight.
+        if (pendingPositions.get(id) === world) pendingPositions.delete(id);
+        else {
+          const newer = pendingPositions.get(id);
+          pendingPositions.delete(id);
+          if (newer) pendingPositions.set(id, newer);
+        }
+      }
+    } catch {
+      layoutError = layoutConflict
+        ? "Layout is unsaved. Reopen the project to load the changes on disk."
+        : "Could not save layout.";
+    } finally {
+      savingLayout = false;
+      status();
+    }
+  }
+
+  retryLayout.onclick = () => void flushPositions();
+
   function status() {
     const drafts = [...w.documents.values()].filter((d) => d.dirty).map((d) => d.scene.name);
     let message = drafts.length
@@ -770,7 +843,10 @@ async function start() {
       : "No unsaved scene edits";
     if (sceneMode() && drafts.length && !w.active.dirty)
       message = `${w.active.scene.name} is clean · ${message}`;
-    if (w.layoutDirty) message += " · Layout changed in this tab";
+    if (layoutError && w.layoutDirty) message += ` · ${layoutError}`;
+    else if (savingLayout) message += " · Saving layout…";
+    else if (w.layoutDirty) message += " · Unsaved layout";
+    retryLayout.hidden = !layoutError || layoutConflict || !w.layoutDirty;
     get("location").textContent =
       `${project.name} / ${sceneMode() ? w.active.scene.name : "World map"}`;
     if (get("status").textContent !== message) get("status").textContent = message;
@@ -941,8 +1017,21 @@ async function start() {
     positionCards();
     status();
   };
-  canvas.onlostpointercapture = () => {
+  canvas.onpointerup = (event) => {
+    if (!drag || drag.pointer !== event.pointerId) return;
+    const { card, moved } = drag;
     drag = undefined;
+    if (card && moved) savePosition(card);
+  };
+  canvas.onlostpointercapture = (event) => {
+    if (!drag || drag.pointer !== event.pointerId) return;
+    const { card, origin, moved } = drag;
+    drag = undefined;
+    if (card && moved) {
+      w.positions.set(card, origin);
+      positionCards();
+      status();
+    }
   };
   canvas.addEventListener(
     "wheel",
@@ -980,6 +1069,7 @@ async function start() {
         p.x += 8 * d.x;
         p.y += 8 * d.y;
         selectScene(card);
+        savePosition(card);
       } else {
         w.camera.x += 24 * d.x;
         w.camera.y += 24 * d.y;

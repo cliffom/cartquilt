@@ -168,3 +168,22 @@ test("scene metadata updates preserve actor undo and redo history", () => {
   assert.equal(workspace.selected, "loom-yard");
   assert.equal(workspace.documents.has("willow-bank"), false);
 });
+
+test("accepting a position save keeps any newer drag and the actor draft", () => {
+  const workspace = new Workspace(decode(response));
+  workspace.active.apply({ type: "moveActor", actor: "courier", axis: "x", value: 81 });
+  const next = structuredClone(response);
+  next.revision = "b".repeat(64);
+  next.project.scenes[0].world = { x: 16, y: -8 };
+  workspace.positions.set("willow-bank", { x: 24, y: -8 });
+  workspace.acceptSceneAction(decode(next), "willow-bank", "position");
+  assert.equal(workspace.layoutDirty, true);
+  assert.equal(workspace.positionFor("willow-bank").x, 24);
+  assert.equal(workspace.active.scene.actors[0].x, 81);
+  next.project.scenes[0].world.x = 24;
+  workspace.acceptSceneAction(decode(next), "willow-bank", "position");
+  assert.equal(workspace.layoutDirty, false);
+  workspace.active.undo();
+  assert.equal(workspace.active.dirty, false);
+  assert.deepEqual(workspace.active.scene.world, { x: 24, y: -8 });
+});

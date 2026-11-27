@@ -64,6 +64,12 @@ Rename, duplicate, border color, and delete use the same manifest write path. A 
 
 **Accepted · Interaction design · 2026-11-27 · M2/M5.** Show scene dimensions in tiles and counts for actors, sprite tiles, and triggers on each world-map card. Estimate sprite tiles from actor dimensions in 8×8 cells and count each referenced sprite once. For a single-screen scene, also estimate the number of 8×8 hardware sprites across all placed actors and the peak on any scanline. Flag estimates above 40 total or 10 on a scanline. These checks cover static placements. Scrolling scenes need a camera-aware check. Set engine budgets for actors, sprite tiles, and triggers using the compiled runtime's allocation and behavior. [Game Boy object attribute memory](https://github.com/gbdev/pandocs/blob/master/src/OAM.md)
 
+### D11 · Persist world-map positions
+
+**Accepted · Architecture · 2026-11-27 · M2.** Save each scene card's integer `world.x` and `world.y` in the versioned project manifest when a drag completes or the creator moves it by keyboard. These are unzoomed editor layout units. Keep the view's pan and zoom local. Save positions through the revision-checked scene operation so other drafts can stay open.
+
+Tiled's `.world` format associates each exported map file with a global pixel position. Define how editor layout units map to those pixels when whole-world export is implemented. [Tiled worlds](https://doc.mapeditor.org/en/stable/manual/worlds/)
+
 ### Decisions due before dependent work
 
 | Before | Decide | Evidence needed |

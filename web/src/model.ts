@@ -103,7 +103,12 @@ export class SceneDocument {
     return this.saved;
   }
   acceptSceneMetadata(saved: Scene) {
-    const update = (scene: Scene) => ({ ...scene, name: saved.name, color: saved.color });
+    const update = (scene: Scene) => ({
+      ...scene,
+      name: saved.name,
+      color: saved.color,
+      world: saved.world,
+    });
     this.saved = update(this.saved);
     this.scene = update(this.scene);
     this.past = this.past.map(update);
@@ -188,7 +193,11 @@ export class Workspace {
     }
     this.saved = next;
   }
-  acceptSceneAction(next: Snapshot, target: string, action: "rename" | "color" | "delete") {
+  acceptSceneAction(
+    next: Snapshot,
+    target: string,
+    action: "rename" | "color" | "delete" | "position",
+  ) {
     const current = this.saved.project;
     const expected =
       action === "delete" ? current.scenes.filter((s) => s.id !== target) : current.scenes;
@@ -196,7 +205,12 @@ export class Workspace {
     const updated = next.project.scenes.find((s) => s.id === target);
     const comparable = (scene: Scene) =>
       scene.id === target && action !== "delete"
-        ? { ...scene, name: previous?.name, color: previous?.color }
+        ? {
+            ...scene,
+            name: action === "rename" ? previous?.name : scene.name,
+            color: action === "color" ? previous?.color : scene.color,
+            world: action === "position" ? previous?.world : scene.world,
+          }
         : scene;
     if (
       !previous ||

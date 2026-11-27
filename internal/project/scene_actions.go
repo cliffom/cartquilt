@@ -15,6 +15,7 @@ type SceneActionInput struct {
 	Action       string `json:"action"`
 	Name         string `json:"name,omitempty"`
 	Color        string `json:"color,omitempty"`
+	World        *Point `json:"world,omitempty"`
 }
 
 func ApplySceneAction(path, id string, input SceneActionInput) (SceneResult, error) {
@@ -30,6 +31,12 @@ func ApplySceneAction(path, id string, input SceneActionInput) (SceneResult, err
 	case "color":
 		if input.Color != "" && !sceneColorPattern.MatchString(input.Color) {
 			return SceneResult{}, fmt.Errorf("%w: choose a six-digit hex color", ErrInvalidInput)
+		}
+	case "position":
+		const maxCoordinate = 1<<53 - 1
+		if input.World == nil || int64(input.World.X) < -maxCoordinate || int64(input.World.X) > maxCoordinate ||
+			int64(input.World.Y) < -maxCoordinate || int64(input.World.Y) > maxCoordinate {
+			return SceneResult{}, fmt.Errorf("%w: enter a valid world position", ErrInvalidInput)
 		}
 	case "duplicate", "delete":
 	default:
@@ -57,6 +64,8 @@ func ApplySceneAction(path, id string, input SceneActionInput) (SceneResult, err
 			} else {
 				fields["color"], _ = json.Marshal(strings.ToLower(input.Color))
 			}
+		case "position":
+			fields["world"], _ = json.Marshal(input.World)
 		case "duplicate":
 			id = newSceneID()
 			fields["id"], _ = json.Marshal(id)

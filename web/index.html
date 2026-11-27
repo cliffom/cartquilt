@@ -161,7 +161,11 @@
       </aside>
     </main>
     <footer id="editor-footer" hidden>
-      <span id="location"></span><span id="status" role="status" aria-live="polite"></span>
+      <span id="location"></span>
+      <div class="editor-status-tools">
+        <span id="status" role="status" aria-live="polite"></span>
+        <button type="button" id="retry-layout-save" hidden>Retry layout save</button>
+      </div>
     </footer>
     <script type="module" src="/src/editor.ts"></script>
   </body>

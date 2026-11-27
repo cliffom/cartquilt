@@ -102,3 +102,29 @@ func TestSceneActionsPersistUnderRevisionChecks(t *testing.T) {
 		t.Fatalf("reopen after deleting all scenes: %+v (%v)", loaded, err)
 	}
 }
+
+func TestScenePositionIsSavedWithItsRevision(t *testing.T) {
+	saved, err := Create(CreateInput{Name: "World", Path: filepath.Join(t.TempDir(), "world")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	added, err := AddScene(saved.Path, AddSceneInput{BaseRevision: saved.Revision, Name: "Loom", Width: 20, Height: 18})
+	if err != nil {
+		t.Fatal(err)
+	}
+	move := SceneActionInput{BaseRevision: added.Revision, Action: "position", World: &Point{X: -52, Y: 183}}
+	moved, err := ApplySceneAction(saved.Path, added.SceneID, move)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ApplySceneAction(saved.Path, added.SceneID, SceneActionInput{
+		BaseRevision: added.Revision, Action: "position", World: &Point{X: 2, Y: 5},
+	})
+	if !errors.Is(err, ErrStaleRevision) {
+		t.Fatalf("stale move: %v", err)
+	}
+	reopened, err := Load(saved.Path)
+	if err != nil || reopened.Revision != moved.Revision || reopened.Project.Scenes[0].World != *move.World {
+		t.Fatalf("reopened: %+v (%v)", reopened, err)
+	}
+}

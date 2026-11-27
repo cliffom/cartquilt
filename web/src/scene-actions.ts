@@ -4,8 +4,23 @@ import { decode, type Workspace } from "./model.js";
 type SceneAction = "rename" | "duplicate" | "color" | "delete";
 export type SceneSurface = "navigator" | "world";
 
+export type QueueSceneWrite = <T>(write: () => Promise<T>) => Promise<T>;
+
+export function createSceneWriteQueue(): QueueSceneWrite {
+  let tail = Promise.resolve();
+  return (write) => {
+    const next = tail.then(write);
+    tail = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
+}
+
 export function setupSceneActions(
   workspace: Workspace,
+  queueWrite: QueueSceneWrite,
   changed: (action: SceneAction, id: string, surface: SceneSurface) => void,
 ) {
   const menu = get("scene-context-menu");
@@ -106,39 +121,41 @@ export function setupSceneActions(
     apply.disabled = cancel.disabled = name.disabled = true;
     status.textContent = "Saving scene…";
     try {
-      const response = await fetch(`./api/project/scenes/${selected.id}/actions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          baseRevision: workspace.snapshot.revision,
-          action: currentAction,
-          ...fields,
-        }),
+      await queueWrite(async () => {
+        const response = await fetch(`./api/project/scenes/${selected.id}/actions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            baseRevision: workspace.snapshot.revision,
+            action: currentAction,
+            ...fields,
+          }),
+        });
+        if (response.headers.get("Cartquilt-Conflict") === "stale-revision")
+          throw Error("The project changed on disk. Reopen it to load the latest scenes.");
+        if (!response.ok) throw Error((await response.text()).trim());
+        const result = await response.json();
+        const next = decode(result);
+        if (currentAction === "duplicate") {
+          if (
+            !next.project.scenes
+              .slice(workspace.snapshot.project.scenes.length)
+              .some((scene) => scene.id === result.sceneId)
+          )
+            throw Error(
+              "The service did not return the duplicated scene. Reopen the project to inspect it.",
+            );
+          workspace.acceptSceneAdditions(next);
+        } else {
+          workspace.acceptSceneAction(next, selected.id, currentAction);
+        }
+        if (dialog.open) dialog.close();
+        changed(
+          currentAction,
+          currentAction === "duplicate" ? result.sceneId : selected.id,
+          selected.surface,
+        );
       });
-      if (response.headers.get("Cartquilt-Conflict") === "stale-revision")
-        throw Error("The project changed on disk. Reopen it to load the latest scenes.");
-      if (!response.ok) throw Error((await response.text()).trim());
-      const result = await response.json();
-      const next = decode(result);
-      if (currentAction === "duplicate") {
-        if (
-          !next.project.scenes
-            .slice(workspace.snapshot.project.scenes.length)
-            .some((scene) => scene.id === result.sceneId)
-        )
-          throw Error(
-            "The service did not return the duplicated scene. Reopen the project to inspect it.",
-          );
-        workspace.acceptSceneAdditions(next);
-      } else {
-        workspace.acceptSceneAction(next, selected.id, currentAction);
-      }
-      if (dialog.open) dialog.close();
-      changed(
-        currentAction,
-        currentAction === "duplicate" ? result.sceneId : selected.id,
-        selected.surface,
-      );
     } catch (error) {
       status.textContent = (error as Error).message;
     } finally {

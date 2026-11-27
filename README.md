@@ -15,7 +15,7 @@ npm start
 
 Open [Cartquilt on your computer](http://127.0.0.1:4173) and choose **New project** or **Open project**. Keep the terminal open while editing. Press Ctrl+C there to stop the service.
 
-**Edits last for the current tab.** You can move between scenes and keep your drafts, map layout, and undo history. Closing or reloading the tab discards them. Cartquilt asks the browser to warn you if you’ve edited a scene or moved a scene card.
+**Actor edits stay in the current tab.** You can move between scenes and keep your actor drafts and undo history. Cartquilt saves scene positions when you drop a card or use Shift+arrow. It asks the browser to warn you if you leave with unsaved edits.
 
 ## Try your first edit
 
@@ -26,7 +26,7 @@ Choose **Open project** and select the included `examples/threadvale` folder to 
 3. Choose **← World map**. Willow Bank is where you placed it, and its thumbnail shows the Courier’s new position. **Draft** marks the scene you edited.
 4. Visit **Loom Yard**, then reopen Willow Bank. Choose **Undo** to move the Courier back and clear the draft. **Redo** restores the move.
 
-**Map controls.** Drag a scene by its header. Drag the background to pan, scroll to zoom around the pointer, or choose **Fit** to bring all scenes into view. With the map focused, use the arrow keys to pan and + or − to zoom. Tab to a card, then press Enter to open it or Shift+arrow to move it. On narrow screens, the **Navigator** and **Inspector** buttons sit beneath the toolbar.
+**Map controls.** Drag a scene by its header to move and save it. Drag the background to pan, scroll to zoom around the pointer, or choose **Fit** to bring all scenes into view. With the map focused, use the arrow keys to pan and + or − to zoom. Tab to a card, then press Enter to open it or Shift+arrow to move it. On narrow screens, the **Navigator** and **Inspector** buttons sit beneath the toolbar.
 
 ## Open your own project
 
