@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "id": "threadvale",
+  "name": "Threadvale",
+  "scenes": [
+    {
+      "id": "willow-bank",
+      "name": "Willow Bank",
+      "width": 20,
+      "height": 14,
+      "art": "willow.png",
+      "world": { "x": 0, "y": 0 },
+      "actors": [
+        {
+          "id": "courier",
+          "name": "Courier",
+          "sprite": "courier.png",
+          "width": 12,
+          "height": 16,
+          "x": 73,
+          "y": 66
+        }
+      ]
+    },
+    {
+      "id": "loom-yard",
+      "name": "Loom Yard",
+      "width": 20,
+      "height": 14,
+      "art": "loom.png",
+      "world": { "x": 298, "y": 132 },
+      "actors": []
+    }
+  ]
+}

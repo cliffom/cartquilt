@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="-.5 -3 32 30" shape-rendering="crispEdges">
+  <title>A pine and a needle on a patch of land</title>
+  <!-- A 4 × 4 square in tile space. Each step projects 3 units right
+       and 1.5 units up or down, giving a symmetric 2:1 pixel-art diamond. -->
+  <path fill="#58774f" d="M1 15L13 21L25 15V18L13 24L1 18Z"/>
+  <g shape-rendering="geometricPrecision">
+    <g transform="matrix(3 -1.5 3 1.5 1 15)">
+      <rect width="4" height="4" fill="#adc887"/>
+      <rect x="0" y="0" width="1" height="1" fill="#a4c081"/>
+      <rect x="1" y="1" width="1" height="1" fill="#b5cc90"/>
+      <rect x="0" y="2" width="1" height="1" fill="#b6ce91"/>
+      <rect x="2" y="2" width="1" height="1" fill="#a0bd7f"/>
+      <rect x="3" y="1" width="1" height="1" fill="#9ebc7c"/>
+      <rect x="1" y="3" width="1" height="1" fill="#a4c081"/>
+      <rect x="3" y="3" width="1" height="1" fill="#b6ce91"/>
+      <rect x="1" y="2" width="1" height="1" fill="#52734d"/>
+    </g>
+    <defs>
+      <path id="seams" d="M4 13.5l12 6 M7 12l12 6 M10 10.5l12 6 M4 16.5l12-6 M7 18l12-6 M10 19.5l12-6"/>
+    </defs>
+    <use href="#seams" fill="none" stroke="#597551" stroke-width=".34"/>
+    <use href="#seams" fill="none" stroke="#e6efcc" stroke-width=".16" stroke-linecap="round" stroke-dasharray=".42 .36"/>
+  </g>
+  <!-- Plant the trunk at the center of the second square on both quilt axes. -->
+  <g transform="translate(10 15) scale(.85) translate(-8.5 -16)"
+     stroke="#344b39" stroke-width=".5" stroke-linejoin="miter">
+    <path fill="#344b39" d="M7 11h3v5H7z"/>
+    <g stroke="none">
+      <path fill="#52694c" d="M7.15 13h1.95v2.75H7.15z"/>
+      <path fill="#708364" d="M7.4 13.55h.35v.9h.25v.65h-.35v-.5H7.4z"/>
+      <path fill="#344b39" d="M8.65 14.25h.5v.3h-.25v.4h-.25z"/>
+    </g>
+    <path fill="#91b778" d="M8 2h1v2h1v2h2v2h-2v1h2v2h2v2H3v-2h2V9h2V8H5V6h2V4h1z"/>
+  </g>
+  <g transform="translate(1 -.5)">
+    <!-- A constant-width shaft ends in an oval eye. -->
+    <g transform="translate(12 17) rotate(-45)" shape-rendering="geometricPrecision">
+      <path fill="#e6eed8" d="M0 0l2-.7h9.5q1-.9 2-.9h2a1.6 1.6 0 0 1 0 3.2h-2q-1 0-2-.9H2z" />
+      <path stroke="#20352a" stroke-width="1.25" stroke-linecap="round" d="M13.5 0h2"/>
+    </g>
+    <path d="M22.6 6.5C24 4 22 2 20 2c-3 0-4 4-2 5 3 2 8-1 10 2 1 2 0 4-1 5" fill="none" stroke="#9cb578" stroke-width=".8" shape-rendering="geometricPrecision"/>
+  </g>
+</svg>
