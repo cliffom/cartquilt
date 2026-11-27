@@ -57,6 +57,23 @@
         </div>
       </form>
     </dialog>
+    <dialog id="new-scene-dialog" aria-labelledby="new-scene-title">
+      <form id="new-scene-form">
+        <h2 id="new-scene-title">New scene</h2>
+        <label for="scene-name">Scene name</label>
+        <input id="scene-name" required />
+        <div class="scene-dimensions">
+          <label for="scene-width">Width in tiles<input id="scene-width" required type="number" min="1" max="1024" value="20" /></label>
+          <label for="scene-height">Height in tiles<input id="scene-height" required type="number" min="1" max="1024" value="18" /></label>
+        </div>
+        <div id="new-scene-status" role="status"></div>
+        <div class="dialog-actions">
+          <button id="cancel-new-scene" type="button">Cancel</button>
+          <button id="refresh-scene-list" type="button" hidden>Refresh scene list</button>
+          <button id="create-scene" class="primary" type="submit">Create scene</button>
+        </div>
+      </form>
+    </dialog>
     <main id="project-launcher" hidden>
       <section class="launcher-card" aria-labelledby="launcher-title">
         <h1 id="launcher-title">Projects</h1>
@@ -74,12 +91,24 @@
     <main id="editor-desk" hidden>
       <aside id="navigator" aria-label="Navigator">
         <h2>Navigator</h2>
-        <label class="filter"
-          ><span aria-hidden="true">⌕</span
-          ><input id="filter" type="search" aria-label="Filter scenes" placeholder="Filter scenes…"
-        /></label>
-        <div class="section"><span>Scenes</span><span id="count"></span></div>
-        <div id="scenes"></div>
+        <div class="section scene-section">
+          <button id="toggle-scenes" class="scene-section-label" type="button" aria-expanded="true" aria-controls="scene-list-group">
+            <span class="scene-disclosure-icon" aria-hidden="true"></span>
+            Scenes <span id="count" aria-hidden="true"></span>
+          </button>
+          <div class="scene-section-actions">
+            <button id="add-scene" type="button" aria-label="New scene" title="New scene" aria-haspopup="dialog">
+              <span aria-hidden="true">+</span>
+            </button>
+            <button id="search-scenes" type="button" aria-label="Search scenes" title="Search scenes" aria-expanded="false" aria-controls="filter">
+              <span class="scene-search-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+        <div id="scene-list-group">
+          <input id="filter" class="scene-filter" type="search" aria-label="Filter scenes" placeholder="Filter scenes…" hidden />
+          <div id="scenes"></div>
+        </div>
         <div id="objects"></div>
       </aside>
       <section id="workspace">

@@ -26,7 +26,7 @@ Choose **Open project** and select the included `examples/threadvale` folder to 
 3. Choose **← World map**. Willow Bank is where you placed it, and its thumbnail shows the Courier’s new position. **Draft** marks the scene you edited.
 4. Visit **Loom Yard**, then reopen Willow Bank. Choose **Undo** to move the Courier back and clear the draft. **Redo** restores the move.
 
-**Map controls.** Drag the background to pan, scroll to zoom around the pointer, or choose **Fit** to bring all scenes into view. With the map focused, use the arrow keys to pan and + or − to zoom. Tab to a card, then press Enter to open it or Shift+arrow to move it. On narrow screens, the **Navigator** and **Inspector** buttons sit beneath the toolbar.
+**Map controls.** Drag a scene by its header. Drag the background to pan, scroll to zoom around the pointer, or choose **Fit** to bring all scenes into view. With the map focused, use the arrow keys to pan and + or − to zoom. Tab to a card, then press Enter to open it or Shift+arrow to move it. On narrow screens, the **Navigator** and **Inspector** buttons sit beneath the toolbar.
 
 ## Open your own project
 
@@ -42,6 +42,8 @@ go run ./cmd/cartquilt -project path/to/project.json
 ```
 
 Keep referenced PNGs beside `project.json`. Scene dimensions are in 8-pixel tiles. Actor positions and sizes are in pixels, measured from the scene’s top-left corner. You can also [create a project from Codex](docs/codex-plugin.md#create-a-project).
+
+In the Navigator, choose **+** next to **Scenes**, enter a name and dimensions in tiles, and select **Create scene**. Cartquilt saves the blank scene and selects its card on the world map. Double-click the card or choose **Open scene** in the Inspector to see the grid. Use the search icon next to **Scenes** to filter the list by name.
 
 ## Development and roadmap
 

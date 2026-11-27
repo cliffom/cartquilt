@@ -1,5 +1,6 @@
 import "./editor.css";
 import { decode, Workspace, type Scene, type Point } from "./model.js";
+import { gbcSpriteLimits, sceneMetrics } from "./scene-metrics.js";
 
 const launcherPreference = "cartquilt.showLauncher";
 const recentProjectsKey = "cartquilt.recentProjects";
@@ -342,6 +343,94 @@ function showLauncher(message = "") {
   get("project-launcher").hidden = false;
 }
 
+function setupSceneCreation(w: Workspace, refreshWorld: (newScene?: string) => void) {
+  const dialog = get<HTMLDialogElement>("new-scene-dialog");
+  const form = get<HTMLFormElement>("new-scene-form");
+  const name = get<HTMLInputElement>("scene-name");
+  const width = get<HTMLInputElement>("scene-width");
+  const height = get<HTMLInputElement>("scene-height");
+  const submit = get<HTMLButtonElement>("create-scene");
+  const cancel = get<HTMLButtonElement>("cancel-new-scene");
+  const refresh = get<HTMLButtonElement>("refresh-scene-list");
+  const message = get("new-scene-status");
+  function busy(value: boolean) {
+    name.disabled =
+      width.disabled =
+      height.disabled =
+      submit.disabled =
+      cancel.disabled =
+      refresh.disabled =
+        value;
+  }
+  cancel.onclick = () => dialog.close();
+  dialog.oncancel = (event) => {
+    if (cancel.disabled) event.preventDefault();
+  };
+  refresh.onclick = async () => {
+    busy(true);
+    try {
+      const response = await fetch("./api/project");
+      if (!response.ok) throw Error("Could not read the saved scene list.");
+      w.acceptSceneAdditions(decode(await response.json()));
+      refreshWorld();
+      refresh.hidden = true;
+      message.textContent = "Scene list refreshed.";
+    } catch (error) {
+      message.textContent = (error as Error).message;
+    } finally {
+      busy(false);
+      (refresh.hidden ? submit : refresh).focus();
+    }
+  };
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (submit.disabled) return;
+    busy(true);
+    message.textContent = "Creating scene…";
+    try {
+      const response = await fetch("./api/project/scenes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseRevision: w.snapshot.revision,
+          name: name.value,
+          width: width.valueAsNumber,
+          height: height.valueAsNumber,
+        }),
+      });
+      if (!response.ok) {
+        refresh.hidden = response.headers.get("Cartquilt-Conflict") !== "stale-revision";
+        throw Error((await response.text()).trim());
+      }
+      const added = await response.json();
+      const next = decode(added);
+      if (
+        !next.project.scenes
+          .slice(w.snapshot.project.scenes.length)
+          .some((scene) => scene.id === added.sceneId)
+      )
+        throw Error(
+          "The service did not return the new scene. Reopen the project to check what was saved.",
+        );
+      w.acceptSceneAdditions(next);
+      dialog.close();
+      refreshWorld(added.sceneId);
+    } catch (error) {
+      message.textContent = (error as Error).message;
+    } finally {
+      busy(false);
+      if (dialog.open && !refresh.hidden) refresh.focus();
+    }
+  };
+  return () => {
+    form.reset();
+    message.textContent = "";
+    refresh.hidden = true;
+    dialog.showModal();
+    name.focus();
+  };
+}
+
 async function start() {
   if (window.location.pathname === "/" && sessionStorage.getItem(launcherPreference) === "true") {
     showLauncher();
@@ -364,6 +453,9 @@ async function start() {
     details = get("details"),
     actions = get("actions");
   const filter = get<HTMLInputElement>("filter");
+  const search = get<HTMLButtonElement>("search-scenes");
+  const sceneGroup = get("scene-list-group");
+  const sceneToggle = get<HTMLButtonElement>("toggle-scenes");
   get("project").textContent = project.name;
   document.title = `${project.name} · Cartquilt`;
   let panelButton: HTMLButtonElement | null = null;
@@ -391,6 +483,21 @@ async function start() {
       close.focus();
     };
   });
+  const newScene = setupSceneCreation(w, (id) => {
+    if (id) {
+      w.selected = id;
+      w.desk = "world";
+      showSceneGroup(true);
+      showSceneSearch(false);
+      closePanel(false);
+    }
+    render();
+    if (id) {
+      fit();
+      plane.querySelector<HTMLButtonElement>("[aria-pressed=true]")?.focus({ preventScroll: true });
+    }
+  });
+  get("add-scene").onclick = newScene;
   function sceneMode() {
     return w.desk === "scene";
   }
@@ -428,9 +535,15 @@ async function start() {
     root.querySelector<HTMLButtonElement>("[aria-pressed=true]")?.focus({ preventScroll: true });
   }
   function artwork(s: Scene, interactive = false) {
-    const art = el("div", "art");
+    const art = el("span", "art");
     art.style.aspectRatio = `${s.width}/${s.height}`;
-    art.append(img(s.art, "background"));
+    if (s.art) {
+      art.append(img(s.art, "background"));
+    } else {
+      art.classList.add("blank-art");
+      art.style.setProperty("--scene-columns", String(s.width));
+      art.style.setProperty("--scene-rows", String(s.height));
+    }
     for (const a of s.actors) {
       const sprite = interactive
         ? button("", () => selectActor(a.id, "canvas"), "sprite")
@@ -453,7 +566,8 @@ async function start() {
       objects = get("objects");
     scenes.replaceChildren();
     objects.replaceChildren();
-    const matches = project.scenes.filter((s) =>
+    const scenesInProject = w.snapshot.project.scenes;
+    const matches = scenesInProject.filter((s) =>
       s.name.toLowerCase().includes(filter.value.trim().toLowerCase()),
     );
     get("count").textContent = String(matches.length);
@@ -466,14 +580,14 @@ async function start() {
         },
         "row",
       );
-      row.append(img(s.art), s.name);
+      row.append(s.art ? img(s.art) : el("span", "blank-scene-thumbnail"), s.name);
       if (w.documentFor(s.id).dirty) row.append(el("span", "badge", "Draft"));
       pressed(row, w.selected === s.id);
       scenes.append(row);
     }
     if (!matches.length)
       scenes.append(
-        el("p", "empty", project.scenes.length ? "No matching scenes" : "No scenes yet"),
+        el("p", "empty", scenesInProject.length ? "No matching scenes" : "No scenes yet"),
       );
     if (!sceneMode()) return;
     objects.append(el("div", "section", "Scene objects"));
@@ -485,7 +599,37 @@ async function start() {
     }
     if (!w.active.scene.actors.length) objects.append(el("p", "empty", "No objects in this scene"));
   }
+  function showSceneGroup(show: boolean) {
+    sceneGroup.hidden = !show;
+    sceneToggle.setAttribute("aria-expanded", String(show));
+    if (!show && !filter.hidden) {
+      showSceneSearch(false);
+      navigator();
+    }
+  }
+  sceneToggle.onclick = () => showSceneGroup(sceneGroup.hidden);
+  function showSceneSearch(show: boolean) {
+    if (show) showSceneGroup(true);
+    filter.hidden = !show;
+    search.setAttribute("aria-expanded", String(show));
+    if (show) filter.focus();
+    else filter.value = "";
+  }
+  function toggleSceneSearch() {
+    showSceneSearch(filter.hidden);
+    if (filter.hidden) {
+      navigator();
+      search.focus();
+    }
+  }
+  search.onclick = toggleSceneSearch;
   filter.oninput = navigator;
+  filter.onkeydown = (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleSceneSearch();
+  };
   function toolbar() {
     const crumb = get("crumb");
     crumb.replaceChildren();
@@ -579,13 +723,28 @@ async function start() {
       preview.append(artwork(s));
       details.append(preview);
       const stats = el("dl");
+      const metrics = sceneMetrics(s);
       stats.append(
         el("dt", "", "Dimensions"),
         el("dd", "", `${s.width} × ${s.height} tiles`),
         el("dt", "", "Actors"),
-        el("dd", "", String(s.actors.length)),
+        el("dd", "", String(metrics.actors)),
+        el("dt", "", "Sprite tiles"),
+        el("dd", "", metrics.spriteTiles ? `~${metrics.spriteTiles}` : "0"),
+        el("dt", "", "Triggers"),
+        el("dd", "", String(metrics.triggers)),
       );
       details.append(stats);
+      const gbc = metrics.gbc;
+      if (gbc && metrics.actors) {
+        details.append(
+          el(
+            "p",
+            gbc.overBudget ? "error" : "empty",
+            `GBC estimate · ${gbc.hardwareSprites}/${gbcSpriteLimits.onscreen} hardware sprites · ${gbc.peakScanline}/${gbcSpriteLimits.perScanline} on the busiest scanline`,
+          ),
+        );
+      }
       if (!sceneMode()) details.append(button("Open scene", () => open(s.id), "primary"));
     }
   }
@@ -664,9 +823,48 @@ async function start() {
       pressed(card, s.id === w.selected);
       card.onclick = () => selectScene(s.id);
       card.ondblclick = () => open(s.id);
-      const caption = el("span", "caption", s.name);
-      if (d.dirty) caption.append(el("span", "badge", "Draft"));
-      card.append(artwork(s), caption);
+      const header = el("span", "scene-card-header");
+      const title = el("span", "scene-card-name", s.name);
+      title.title = s.name;
+      header.append(title);
+      if (d.dirty) header.append(el("span", "badge", "Draft"));
+      const metrics = sceneMetrics(s);
+      const footer = el("span", "scene-card-footer");
+      footer.append(el("span", "scene-card-metric", `${s.width}×${s.height}`));
+      for (const [short, value] of [
+        ["A", String(metrics.actors)],
+        ["S", metrics.spriteTiles ? `~${metrics.spriteTiles}` : "0"],
+        ["T", String(metrics.triggers)],
+      ]) {
+        const metric = el("span", "scene-card-metric");
+        metric.append(el("span", "scene-metric-label", `${short}: `), value);
+        if (short === "S" && metrics.gbc?.overBudget) metric.classList.add("scene-card-warning");
+        footer.append(metric);
+      }
+      const tooltip = el("span", "scene-card-tooltip");
+      tooltip.id = `scene-summary-${s.id}`;
+      tooltip.setAttribute("role", "tooltip");
+      const gbc = metrics.gbc;
+      const rows = [
+        `Size ${s.width}×${s.height} tiles (${s.width * 8}×${s.height * 8} pixels)`,
+        `Actors ${metrics.actors} · Triggers ${metrics.triggers}`,
+        `Estimated sprite tiles ${metrics.spriteTiles}`,
+      ];
+      if (gbc) {
+        rows.push(
+          `GBC estimates in 8×8 sprite mode`,
+          `${gbc.hardwareSprites}/${gbcSpriteLimits.onscreen} hardware sprites · ${gbc.peakScanline}/${gbcSpriteLimits.perScanline} on the busiest scanline`,
+        );
+      }
+      for (const row of rows) tooltip.append(el("span", "", row));
+      if (gbc?.overBudget)
+        tooltip.append(el("span", "scene-card-warning", "GBC sprite budget exceeded"));
+      footer.append(tooltip);
+      footer.onpointerenter = () => delete card.dataset.tooltipDismissed;
+      card.onfocus = () => delete card.dataset.tooltipDismissed;
+      card.setAttribute("aria-label", d.dirty ? `${s.name} · Draft` : s.name);
+      card.setAttribute("aria-describedby", tooltip.id);
+      card.append(header, artwork(s), footer);
       plane.append(card);
     }
     positionCards();
@@ -679,8 +877,9 @@ async function start() {
     );
     get("hints").textContent = sceneMode()
       ? "Select an actor to edit its position"
-      : "Drag background to pan · Scroll to zoom · Double-click a scene to open";
-    if (!project.scenes.length) get("hints").textContent = "This world has no scenes yet";
+      : "Drag a scene header to move it · Double-click a scene to open";
+    if (!w.snapshot.project.scenes.length)
+      get("hints").textContent = "This world has no scenes yet";
     if (sceneMode() && !w.active.scene.actors.length)
       get("hints").textContent = "No actors in this scene";
     toolbar();
@@ -693,7 +892,9 @@ async function start() {
   let drag: Drag | undefined;
   canvas.onpointerdown = (e) => {
     if (sceneMode() || e.button !== 0 || drag) return;
-    const card = (e.target as Element).closest<HTMLElement>(".card");
+    const target = e.target as Element;
+    const card = target.closest<HTMLElement>(".card");
+    if (card && !target.closest(".scene-card-header")) return;
     const id = card?.dataset.id;
     drag = {
       pointer: e.pointerId,
@@ -774,6 +975,15 @@ async function start() {
   };
   document.addEventListener("keydown", (e) => {
     if (document.querySelector("dialog[open]")) return;
+    if (e.key === "Escape") {
+      const card = plane.querySelector<HTMLElement>(
+        ".card:not([data-tooltip-dismissed]):is(:focus-visible, :has(.scene-card-footer:hover))",
+      );
+      if (card) {
+        card.dataset.tooltipDismissed = "";
+        return;
+      }
+    }
     if (e.key === "Escape" && panelButton) {
       closePanel();
       return;

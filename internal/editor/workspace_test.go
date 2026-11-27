@@ -20,7 +20,11 @@ func TestCreateProjectHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := New(&project.Saved{Snapshot: project.Snapshot{Project: project.Project{Name: "Original"}}, Path: filepath.Join(dir, "project.json")}, fstest.MapFS{})
+	original, err := project.Create(project.CreateInput{Name: "Original", Path: filepath.Join(dir, "original")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(&original, fstest.MapFS{})
 	post := func(origin string, body []byte) *httptest.ResponseRecorder {
 		req := httptest.NewRequest("POST", "http://127.0.0.1:4173/api/projects", strings.NewReader(string(body)))
 		req.Header.Set("Content-Type", "application/json")
@@ -117,5 +121,54 @@ func TestOpenSavedProjectAcrossSessions(t *testing.T) {
 			decodeErr != nil || opened.Project.ID != created.Project.ID || opened.Revision != created.Revision {
 			t.Fatalf("reopen %q: %d %s (%v)", path, rec.Code, rec.Body, decodeErr)
 		}
+	}
+}
+
+func TestCreateSceneThroughOpenedProject(t *testing.T) {
+	saved, err := project.Create(project.CreateInput{Name: "Loom Draft", Path: filepath.Join(t.TempDir(), "Loom Draft")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(nil, fstest.MapFS{})
+	post := func(path string, input any) *httptest.ResponseRecorder {
+		t.Helper()
+		body, err := json.Marshal(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest("POST", "http://127.0.0.1:4173"+path, strings.NewReader(string(body)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "http://127.0.0.1:4173")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+	opened := post("/api/project-open", project.OpenInput{Path: saved.Path})
+	if opened.Code != http.StatusOK {
+		t.Fatalf("open: %d %s", opened.Code, opened.Body)
+	}
+	path := opened.Header().Get("Location") + "api/project"
+	input := project.AddSceneInput{BaseRevision: saved.Revision, Name: "  Dye Garden ", Width: 20, Height: 18}
+	added := post(path+"/scenes", input)
+	var next project.AddedScene
+	if err := json.Unmarshal(added.Body.Bytes(), &next); err != nil || added.Code != http.StatusCreated || len(next.Project.Scenes) != 1 {
+		t.Fatalf("create scene: %d %s (%v)", added.Code, added.Body, err)
+	}
+	scene := next.Project.Scenes[0]
+	if scene.ID != next.SceneID || scene.Name != "Dye Garden" || scene.Width != 20 || scene.Height != 18 || scene.Art != "" || scene.World != (project.Point{}) {
+		t.Fatalf("scene: %+v", scene)
+	}
+	if stale := post(path+"/scenes", input); stale.Code != http.StatusConflict || stale.Header().Get("Cartquilt-Conflict") != "stale-revision" {
+		t.Fatalf("stale add: %d %s", stale.Code, stale.Body)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+	var current project.Snapshot
+	if err := json.Unmarshal(rec.Body.Bytes(), &current); err != nil || current.Revision != next.Revision {
+		t.Fatalf("read through active route: %d %s (%v)", rec.Code, rec.Body, err)
+	}
+	reopened, err := project.Open(project.OpenInput{Path: saved.Path})
+	if err != nil || reopened.Revision != next.Revision || len(reopened.Project.Scenes) != 1 {
+		t.Fatalf("read through a fresh session: %+v (%v)", reopened, err)
 	}
 }

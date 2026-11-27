@@ -72,7 +72,7 @@ export function decode(value: unknown): Snapshot {
     return {
       id: str(s.id, id),
       name: str(s.name),
-      art: str(s.art, asset),
+      art: s.art === "" ? "" : str(s.art, asset),
       width,
       height,
       world: { x: integer(world.x), y: integer(world.y) },
@@ -145,12 +145,35 @@ export class Workspace {
   positions = new Map<string, Point>();
   documents = new Map<string, SceneDocument>();
   camera = { x: 0, y: 0, zoom: 1 };
-  constructor(readonly snapshot: Snapshot) {
+  constructor(private saved: Snapshot) {
+    const snapshot = this.saved;
     this.selected = snapshot.project.scenes[0]?.id;
     for (const scene of snapshot.project.scenes) {
       this.documents.set(scene.id, new SceneDocument(scene));
       this.positions.set(scene.id, { ...scene.world });
     }
+  }
+  get snapshot() {
+    return this.saved;
+  }
+  acceptSceneAdditions(next: Snapshot) {
+    const current = this.saved.project;
+    const scenes = next.project.scenes;
+    if (
+      next.project.id !== current.id ||
+      next.project.name !== current.name ||
+      scenes.length < current.scenes.length ||
+      current.scenes.some((scene, index) => JSON.stringify(scene) !== JSON.stringify(scenes[index]))
+    ) {
+      throw Error(
+        "Existing project data changed on disk. Reopen the project to load those changes.",
+      );
+    }
+    for (const scene of scenes.slice(current.scenes.length)) {
+      this.documents.set(scene.id, new SceneDocument(scene));
+      this.positions.set(scene.id, { ...scene.world });
+    }
+    this.saved = next;
   }
   documentFor(id: string | undefined) {
     const document = id && this.documents.get(id);

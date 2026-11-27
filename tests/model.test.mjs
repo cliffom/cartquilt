@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decode, SceneDocument, Workspace } from "../.local/test-js/model.js";
+import { sceneMetrics } from "../.local/test-js/scene-metrics.js";
 
 const temp = mkdtempSync(join(tmpdir(), "cartquilt-contract-"));
 let response;
@@ -93,4 +94,49 @@ test("an empty saved project opens on the world desk", () => {
   assert.equal(workspace.selected, undefined);
   assert.equal(workspace.documents.size, 0);
   assert.equal(workspace.layoutDirty, false);
+});
+
+test("new blank scenes advance the saved revision and preserve the existing draft", () => {
+  const snapshot = decode(response);
+  const workspace = new Workspace(snapshot);
+  const willow = workspace.active;
+  willow.apply({ type: "moveActor", actor: "courier", axis: "x", value: 81 });
+  workspace.positionFor("willow-bank").x += 8;
+  const added = structuredClone(response);
+  added.revision = "1".repeat(64);
+  added.project.scenes.push({
+    id: "dye-garden",
+    name: "Dye Garden",
+    art: "",
+    width: 20,
+    height: 18,
+    world: { x: 640, y: 0 },
+    actors: [],
+  });
+  workspace.acceptSceneAdditions(decode(added));
+  assert.equal(workspace.snapshot.revision, added.revision);
+  assert.equal(workspace.active, willow);
+  assert.equal(willow.dirty, true);
+  assert.equal(workspace.layoutDirty, true);
+  assert.equal(workspace.documentFor("dye-garden").scene.art, "");
+  added.project.scenes[0].name = "Changed on disk";
+  assert.throws(
+    () => workspace.acceptSceneAdditions(decode(added)),
+    /Existing project data changed/,
+  );
+  assert.equal(workspace.active, willow);
+});
+
+test("sprite tile estimates count shared assets once and hardware sprites per placement", () => {
+  const scene = decode(response).project.scenes[0];
+  const courier = scene.actors[0];
+  scene.actors = Array.from({ length: 6 }, (_, index) => ({
+    ...courier,
+    id: `actor-${index}`,
+  }));
+  const metrics = sceneMetrics(scene);
+  assert.equal(metrics.actors, 6);
+  assert.equal(metrics.spriteTiles, 4);
+  assert.deepEqual(metrics.gbc, { hardwareSprites: 24, peakScanline: 12, overBudget: true });
+  assert.equal(sceneMetrics({ ...scene, width: 21 }).gbc, undefined);
 });

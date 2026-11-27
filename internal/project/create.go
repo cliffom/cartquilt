@@ -61,23 +61,34 @@ func saveNewProject(dir string, project Project) (Saved, error) {
 	if err != nil {
 		return Saved{}, err
 	}
-	temp, err := os.CreateTemp(dir, ".project-*")
+	data = append(data, '\n')
+	snapshot, err := decodeSnapshot(data)
 	if err != nil {
 		return Saved{}, err
 	}
-	defer os.Remove(temp.Name())
-	_, writeErr := temp.Write(append(data, '\n'))
-	if err := errors.Join(writeErr, temp.Close()); err != nil {
-		return Saved{}, err
-	}
-	snapshot, err := Load(temp.Name())
+	temp, err := writeCandidate(dir, data, 0600)
 	if err != nil {
 		return Saved{}, err
 	}
+	defer os.Remove(temp)
 	path := filepath.Join(dir, "project.json")
 	// Publish a complete file without replacing any file already at the destination.
-	if err := os.Link(temp.Name(), path); err != nil {
+	if err := os.Link(temp, path); err != nil {
 		return Saved{}, err
 	}
 	return Saved{Snapshot: snapshot, Path: path}, nil
+}
+
+func writeCandidate(dir string, data []byte, mode os.FileMode) (string, error) {
+	file, err := os.CreateTemp(dir, ".project-*")
+	if err != nil {
+		return "", err
+	}
+	_, writeErr := file.Write(data)
+	err = errors.Join(writeErr, file.Chmod(mode), file.Sync(), file.Close())
+	if err != nil {
+		_ = os.Remove(file.Name())
+		return "", err
+	}
+	return file.Name(), nil
 }

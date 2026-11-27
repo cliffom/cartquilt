@@ -48,8 +48,12 @@ func Load(path string) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	return decodeSnapshot(data)
+}
+
+func decodeSnapshot(data []byte) (Snapshot, error) {
 	var p Project
-	if err = json.Unmarshal(data, &p); err != nil {
+	if err := json.Unmarshal(data, &p); err != nil {
 		return Snapshot{}, err
 	}
 	if p.Version != 1 || !idPattern.MatchString(p.ID) || p.Name == "" || p.Scenes == nil {
@@ -57,7 +61,7 @@ func Load(path string) (Snapshot, error) {
 	}
 	ids := map[string]bool{}
 	for _, s := range p.Scenes {
-		if ids[s.ID] || !idPattern.MatchString(s.ID) || s.Name == "" || !assetPattern.MatchString(s.Art) || s.Width < 1 || s.Height < 1 || s.Width > 1024 || s.Height > 1024 || s.Actors == nil {
+		if ids[s.ID] || !idPattern.MatchString(s.ID) || s.Name == "" || (s.Art != "" && !assetPattern.MatchString(s.Art)) || s.Width < 1 || s.Height < 1 || s.Width > 1024 || s.Height > 1024 || s.Actors == nil {
 			return Snapshot{}, fmt.Errorf("invalid scene %q", s.ID)
 		}
 		ids[s.ID] = true

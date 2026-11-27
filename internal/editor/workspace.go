@@ -42,7 +42,7 @@ func New(initial *project.Saved, web fs.FS) http.Handler {
 		if resolved, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
 			path = filepath.Join(resolved, filepath.Base(path))
 		}
-		entry := sessionProject{path: path, handler: projectRoutes(saved.Snapshot, filepath.Dir(saved.Path), editorFiles)}
+		entry := sessionProject{path: path, handler: projectRoutes(saved.Path, editorFiles)}
 		base := projectSlug(saved.Project.Name)
 		slug := base
 		for suffix := 2; ; suffix++ {
@@ -62,7 +62,7 @@ func New(initial *project.Saved, web fs.FS) http.Handler {
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(saved)
 	}
-	mux.HandleFunc("GET /projects/{slug}/", func(w http.ResponseWriter, r *http.Request) {
+	serveOpenedProject := func(w http.ResponseWriter, r *http.Request) {
 		slug := r.PathValue("slug")
 		handler, ok := projects.Load(slug)
 		if !ok {
@@ -74,7 +74,9 @@ func New(initial *project.Saved, web fs.FS) http.Handler {
 			return
 		}
 		http.StripPrefix("/projects/"+slug, handler.(sessionProject).handler).ServeHTTP(w, r)
-	})
+	}
+	mux.HandleFunc("GET /projects/{slug}/", serveOpenedProject)
+	mux.HandleFunc("POST /projects/{slug}/api/project/scenes", serveOpenedProject)
 	mux.HandleFunc("POST /api/projects", func(w http.ResponseWriter, r *http.Request) {
 		var input project.CreateInput
 		if !decodeLocalRequest(w, r, &input) {
@@ -121,7 +123,7 @@ func New(initial *project.Saved, web fs.FS) http.Handler {
 		})
 		mux.Handle("GET /", editorFiles)
 	} else {
-		mux.Handle("/", projectRoutes(initial.Snapshot, filepath.Dir(initial.Path), editorFiles))
+		mux.Handle("/", projectRoutes(initial.Path, editorFiles))
 	}
 	return mux
 }
