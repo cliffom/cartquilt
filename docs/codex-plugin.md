@@ -8,9 +8,9 @@
 
 1. Select a new project location or inspect the explicitly selected project and revision. Establish whether the request adds four scenes or revises existing ones. Keep the creative brief in the Codex conversation.
 2. Propose four named scenes: Willow Bank, Dye Garden, Loom Yard, and Weaver’s Loft. Give each a purpose, a distinct silhouette, an entrance, and a reachable destination. Allocate stable IDs once for the batch so doors can refer to scenes created in the same proposal.
-3. Return a world-map preview and a labeled top-down blockout for each scene. Offer the collision view alongside the artwork. Show a summary of additions, changed objects, and validation errors. The creator can move a gate or widen a path before accepting.
+3. Return a world-map preview and a playable placeholder blockout for each scene in its chosen movement profile. Walk the riverbank and jump across the loft. Report marker-to-marker traversal times before proposing finished tiles. Offer the collision view alongside the artwork. Show a summary of additions, changed objects, and validation errors. The creator can move a gate or widen a path before accepting.
 4. On acceptance, validate and apply the reviewed batch to its base revision. Reject an unresolved entrance or obstructed required route with its scene and coordinates. A failed commit leaves the prior project intact. Retrying the accepted proposal must not duplicate scenes.
-5. Reopen the saved project in the browser. Confirm four scenes, their entrances, and the same collision masks. Click a world connection to open its source trigger. Repeat with an unsaved Courier move in a browser tab and confirm it remains recoverable. Once M5 lands, play through all four scenes.
+5. Reopen the saved project in the browser. Confirm four scenes, their entrances, and the same collision masks. Click a world connection to open its source trigger. Repeat with an unsaved Courier move in a browser tab and confirm it remains recoverable. Play through their entrances in browser preview. Once M5 lands, repeat on the compiled target.
 
 ## Package and installation target
 
@@ -40,8 +40,8 @@ Each skill should describe when to use it, which project inputs it needs, what t
 | --- | --- |
 | Start or inspect a project | Find the intended project, check capabilities and revision, and open the Courier in context. Bundle with the inspect-only increment. |
 | Build a connected world | Translate a game brief into scene purposes, placement, entrances, and exits. Coordinate the four-scene proposal and check all references. |
-| Generate and revise a blockout | Convert a scene description into terrain, landmarks, routes, and footprints. Return a legended preview and revise one region. |
+| Generate and revise a blockout | Convert a scene description into terrain, landmarks, routes, and footprints. Return a playable rough scene and a labeled map. Revise one region, then compare a recorded walk or jump. |
 | Review collision and traversal | Trace a required route, identify the object blocking it, preview an overlay, and propose a scoped repair. |
-| Author assets and animation | Follow a scene selection to its asset, edit a palette or walk cycle, and preview in context. Expand to fonts, UI, music, and sound as M6 tools ship. |
+| Author assets and animation | Generate tiles for accepted terrain, preview collision over the rendered scene, then generate sprites and a frame atlas. Inspect frame bounds, scrub animation timing, and preview a walk or jump on its actor. Expand to fonts, UI, music, and sound as M6 tools ship. |
 | Script and debug interactions | Attach dialogue and a variable condition to a gate, exercise both branches, and report the source event. Ship with M7. |
 | Build and playtest | Run the selected revision, capture the failing scene and hardware budget, and return a reproducible playthrough. Grow with the runtime milestones. |
