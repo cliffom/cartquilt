@@ -79,7 +79,6 @@ export function decode(value: unknown): Snapshot {
       actors,
     };
   });
-  if (!scenes.length) throw Error("A project needs a scene");
   return {
     revision: str(snapshot.revision, /^[0-9a-f]{64}$/),
     project: { version: 1, id: str(p.id, id), name: str(p.name), scenes },
@@ -141,20 +140,20 @@ export class SceneDocument {
 }
 export class Workspace {
   desk: "world" | "scene" = "world";
-  selected: string;
+  selected: string | undefined;
   objects = new Map<string, string>();
   positions = new Map<string, Point>();
   documents = new Map<string, SceneDocument>();
   camera = { x: 0, y: 0, zoom: 1 };
   constructor(readonly snapshot: Snapshot) {
-    this.selected = snapshot.project.scenes[0].id;
+    this.selected = snapshot.project.scenes[0]?.id;
     for (const scene of snapshot.project.scenes) {
       this.documents.set(scene.id, new SceneDocument(scene));
       this.positions.set(scene.id, { ...scene.world });
     }
   }
-  documentFor(id: string) {
-    const document = this.documents.get(id);
+  documentFor(id: string | undefined) {
+    const document = id && this.documents.get(id);
     if (!document) throw Error(`Unknown scene: ${id}`);
     return document;
   }

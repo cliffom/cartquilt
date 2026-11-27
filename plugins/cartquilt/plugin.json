@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "cartquilt",
+  "version": "0.1.0",
+  "description": "Create local Game Boy Color projects for Cartquilt.",
+  "repository": "https://github.com/cliffom/cartquilt",
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true,
+      "interface": {
+        "displayName": "Cartquilt",
+        "composerIcon": "./assets/cartquilt-64.png",
+        "logo": "./assets/cartquilt-64.png",
+        "defaultPrompt": ["Create a new Cartquilt project at a folder I choose."]
+      }
+    }
+  }
+}

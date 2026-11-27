@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"flag"
@@ -12,6 +13,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Point struct {
@@ -48,6 +51,7 @@ type Snapshot struct {
 
 var idPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 var assetPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+\.png$`)
+var editorFiles = http.FileServer(http.Dir("web/public"))
 
 func loadProject(path string) (Snapshot, error) {
 	data, err := os.ReadFile(path)
@@ -58,7 +62,7 @@ func loadProject(path string) (Snapshot, error) {
 	if err = json.Unmarshal(data, &p); err != nil {
 		return Snapshot{}, err
 	}
-	if p.Version != 1 || !idPattern.MatchString(p.ID) || p.Name == "" || len(p.Scenes) == 0 {
+	if p.Version != 1 || !idPattern.MatchString(p.ID) || p.Name == "" || p.Scenes == nil {
 		return Snapshot{}, fmt.Errorf("invalid project header")
 	}
 	ids := map[string]bool{}
@@ -99,22 +103,33 @@ func editor(snapshot Snapshot, dir string) http.Handler {
 		}
 		http.ServeFile(w, r, filepath.Join(dir, name))
 	})
-	mux.Handle("GET /", http.FileServer(http.Dir("web/public")))
+	mux.Handle("GET /", editorFiles)
 	return mux
 }
 func main() {
-	path := flag.String("project", "examples/threadvale/project.json", "saved project file")
+	path := flag.String("project", "", "saved project file to open at startup")
 	port := flag.Int("port", 4173, "local HTTP port")
+	mcpMode := flag.Bool("mcp", false, "serve Cartquilt MCP over standard input and output")
 	flag.Parse()
-	snapshot, err := loadProject(*path)
-	if err != nil {
-		log.Fatal(err)
+	if *mcpMode {
+		if err := cartquiltMCP().Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	var initial *Snapshot
+	if *path != "" {
+		snapshot, err := loadProject(*path)
+		if err != nil {
+			log.Fatal(err)
+		}
+		initial = &snapshot
 	}
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("Cartquilt at http://%s", listener.Addr())
-	server := http.Server{Handler: editor(snapshot, filepath.Dir(*path)), ReadHeaderTimeout: 5 * time.Second}
+	server := http.Server{Handler: workspaceServer(initial, filepath.Dir(*path)), ReadHeaderTimeout: 5 * time.Second}
 	log.Fatal(server.Serve(listener))
 }

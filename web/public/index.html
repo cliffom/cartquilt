@@ -10,14 +10,69 @@
   <body>
     <header>
       <img src="/cartquilt-64.png" srcset="/cartquilt-64.png 64w, /cartquilt-256.png 256w" sizes="48px" width="48" height="48" alt="" /><strong>Cartquilt</strong
-      ><span class="slash">/</span><span id="project">Loading project…</span
-      ><span
-        class="local"
-        title="Scene edits and world layout changes last in this tab until reload."
-        >Local workspace</span
-      >
+      ><span class="slash" id="project-divider" hidden>/</span><span id="project" hidden></span>
+      <div class="header-tools">
+        <span id="service-status" class="service-status" role="status" title="Checking service">
+          <span class="visually-hidden">Checking service</span>
+        </span>
+        <details id="project-menu" class="project-menu" hidden>
+          <summary title="Project menu">
+            <span class="hamburger-icon" aria-hidden="true"></span>
+            <span class="visually-hidden">Project menu</span>
+          </summary>
+          <div class="project-menu-panel">
+            <button id="new-project" type="button">New project</button>
+            <button id="open-project" type="button">Open project</button>
+            <button id="close-project" type="button">Close project</button>
+          </div>
+        </details>
+      </div>
     </header>
-    <main>
+    <dialog id="new-project-dialog" aria-labelledby="new-project-title">
+      <form id="new-project-form">
+        <h2 id="new-project-title">New project</h2>
+        <div id="project-name-field">
+          <label for="project-name">Project name</label>
+          <input id="project-name" required />
+        </div>
+        <label for="project-path">Project folder</label>
+        <div class="folder-path-row">
+          <input id="project-path" required aria-describedby="project-path-help" spellcheck="false" />
+          <button id="browse-project-folders" type="button">Browse…</button>
+        </div>
+        <small id="project-path-help">Choose a parent folder or enter the full path to a new project folder.</small>
+        <div id="create-project-result" role="status"></div>
+        <div class="dialog-actions">
+          <button id="close-project-dialog" type="button">Close</button>
+          <button id="create-project" class="primary" type="submit">Create project</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="confirm-project-close" aria-labelledby="confirm-close-title" aria-describedby="confirm-close-message">
+      <form method="dialog">
+        <h2 id="confirm-close-title">Close project?</h2>
+        <p id="confirm-close-message"></p>
+        <div class="dialog-actions">
+          <button value="cancel" autofocus>Cancel</button>
+          <button value="close" class="primary">Close project</button>
+        </div>
+      </form>
+    </dialog>
+    <main id="project-launcher" hidden>
+      <section class="launcher-card" aria-labelledby="launcher-title">
+        <h1 id="launcher-title">Projects</h1>
+        <div class="launcher-actions" id="launcher-actions">
+          <button id="start-new-project" class="primary" type="button">New project</button>
+          <button id="start-open-project" type="button">Open project</button>
+        </div>
+        <p id="launcher-status" role="status" hidden></p>
+        <section id="recent-projects" aria-labelledby="recent-projects-title" hidden>
+          <h2 id="recent-projects-title">Recent projects</h2>
+          <ul id="recent-project-list"></ul>
+        </section>
+      </section>
+    </main>
+    <main id="editor-desk" hidden>
       <aside id="navigator" aria-label="Navigator">
         <h2>Navigator</h2>
         <label class="filter"
@@ -48,7 +103,7 @@
         <div id="details"></div>
       </aside>
     </main>
-    <footer>
+    <footer id="editor-footer" hidden>
       <span id="location"></span><span id="status" role="status" aria-live="polite"></span>
     </footer>
     <script type="module" src="/js/editor.js"></script>

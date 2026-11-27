@@ -42,6 +42,12 @@ Prototype one river crossing with a collidable crate. Test moving the crate, cha
 
 Bring supported reimport changes through the proposal and revision checks in D02. Verify reimport without edits, an art-only edit, and a geometry edit across the top-down and platformer fixtures before releasing import. Use the [roadmap checks](../../ROADMAP.md#tiled-compatibility) to verify replay timing, collision, and reference integrity. Expand the format subset when representative external maps establish what creators need.
 
+### D07 · Create an empty local project
+
+**Accepted · Architecture · 2026-11-26 · M0.** Create a blank project at an explicit absolute folder path and persist a versioned `project.json` with a stable project ID and an empty scene list. The browser and MCP tool use one creation function. Requiring a new folder gives the creator a clear destination and prevents existing files from being replaced. Use the normal project loader for empty projects and examples alike. Exercise both creation paths, reopening the saved file and checking that an existing folder survives a second request.
+
+**Accepted · 2026-11-27.** Use the saved project folder or JSON path to locate a project in the browser and MCP. The saved ID identifies the project and the revision identifies its current content. Readable browser routes belong to one running server. Verify that an independent server and MCP session can load the same saved project by path.
+
 ### Decisions due before dependent work
 
 | Before | Decide | Evidence needed |

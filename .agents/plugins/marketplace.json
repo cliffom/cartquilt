@@ -1,0 +1,20 @@
+{
+  "name": "cartquilt",
+  "interface": {
+    "displayName": "Cartquilt"
+  },
+  "plugins": [
+    {
+      "name": "cartquilt",
+      "source": {
+        "source": "local",
+        "path": "./plugins/cartquilt"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

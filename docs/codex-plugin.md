@@ -1,8 +1,16 @@
 # Cartquilt in Codex
 
-**Planned delivery, M4.** A creator should be able to start in Codex, describe a world, inspect the proposed scenes visually, and open any object in the browser for fine editing. The project stays local. The first installable increment can inspect Threadvale while generation, persistence, and preview are developed. [Milestones and prerequisites](../ROADMAP.md)
+The first increment creates empty local projects. M4 adds connected scene authoring, visual review, and revision-aware edits. [Milestones and prerequisites](../ROADMAP.md)
 
-## First release demonstration
+## Create a project
+
+From the repository root, run `go install ./cmd/cartquilt`. Make the installed `cartquilt` executable available on the local Codex process’s `PATH`. Register this checkout with `codex plugin marketplace add .`, then run `codex plugin add cartquilt@cartquilt`.
+
+In a local Codex chat, ask **“Use @cartquilt to create a project named Threadvale Draft at /absolute/path/to/threadvale-draft.”** The `create_project` tool takes `name` and `path`. Choose a new folder inside an existing parent folder. The tool returns the saved `project.json` path, project ID, and revision. Use the returned path in the editor's [Open dialog](../README.md#open-your-own-project).
+
+In a new chat, ask **“Use @cartquilt to open /absolute/path/to/threadvale-draft.”** The read-only `open_project` tool accepts the same project folder or saved JSON path as the editor's **Open** dialog and reports its current saved revision.
+
+## M4 authoring demonstration
 
 > Use @cartquilt to build a world and 4 scenes for a game about a courier bringing a lost pattern home.
 
@@ -14,9 +22,9 @@
 
 ## Package and installation target
 
-Keep the catalog at `.agents/plugins/marketplace.json`, with a marketplace named `cartquilt` and a plugin entry pointing to `./plugins/cartquilt`. Under that folder, plan for a versioned `plugin.json`, `mcp.json` for the local server connection, `skills/<name>/SKILL.md`, and the approved icon. Resolve packaged resources relative to the installed plugin. Select the creator’s project separately. [Codex plugin packaging and marketplace reference](https://developers.openai.com/plugins/build/plugins)
+The catalog at `.agents/plugins/marketplace.json` points to `./plugins/cartquilt`. The plugin ships its manifest and icon, and its `mcp.json` launches the installed `cartquilt -mcp` executable over stdio. Bundle skills as the matching workflows ship. [Codex plugin packaging and marketplace reference](https://developers.openai.com/plugins/build/plugins)
 
-Test these installation paths **when a package exists**:
+Verify these installation paths for the GitHub-backed release:
 
 - **CLI:** register the GitHub marketplace with `codex plugin marketplace add cliffom/cartquilt`, then install its entry with `codex plugin add cartquilt@cartquilt`. Start a fresh chat and invoke `@cartquilt`.
 - **Desktop:** from the plugin directory, add the repository marketplace source, choose Cartquilt, and install it. In a new local chat, verify the mention resolves and run the same demonstration. Record the tested client version and actual UI steps at release.
@@ -27,6 +35,7 @@ Before publishing, validate the catalog, manifest, relative paths, skill discove
 
 | Increment | Tools must let the creator… | Verification |
 | --- | --- | --- |
+| Create | Name a project and choose a new local folder. | Open the returned snapshot in the editor and verify a duplicate request preserves the saved project. |
 | Inspect | Select a project, inspect capabilities, read its revision, enumerate scenes/assets, resolve an ID and its references. | Read-only inspection of Threadvale returns the same Courier and coordinates as the Inspector. |
 | Propose and preview | Submit a typed batch, validate bounds and references, render candidate world/scene/collision views, revise or discard it. | Browser and MCP render the same candidate geometry. Discard leaves the saved revision intact. |
 | Apply and reconcile | Accept a specific proposal, recheck its revision, commit atomically, and report affected IDs and the new revision. | A stale proposal fails with a comparison. A dirty browser tab retains its local copy and history until the creator reconciles it. |

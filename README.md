@@ -6,18 +6,20 @@ Cartquilt is a local-first Game Boy Color world and scene editor designed for de
 
 ## Get started
 
-Install Go 1.22 or later and Node.js 20 or later with npm. From the repository root, run:
+Install Go 1.25 or later and Node.js 20 or later with npm. From the repository root, run:
 
 ```sh
 npm ci
 npm start
 ```
 
-Open [Cartquilt on your computer](http://127.0.0.1:4173). You’ll see the world map for **Threadvale**, the included two-scene project. Keep the terminal open while editing. Press Ctrl+C there to stop the service.
+Open [Cartquilt on your computer](http://127.0.0.1:4173) and choose **New project** or **Open project**. Keep the terminal open while editing. Press Ctrl+C there to stop the service.
 
 **Edits last for the current tab.** You can move between scenes and keep your drafts, map layout, and undo history. Closing or reloading the tab discards them. Cartquilt asks the browser to warn you if you’ve edited a scene or moved a scene card.
 
 ## Try your first edit
+
+Choose **Open project** and select the included `examples/threadvale` folder to try the two-scene sample.
 
 1. Drag **Willow Bank** to a new spot on the map, then double-click its card or select **Open scene** in the Inspector.
 2. Select the **Courier** on the canvas or in the Navigator. In the Inspector, change **X** from **73** to **81**. The Courier moves one tile to the right.
@@ -28,14 +30,18 @@ Open [Cartquilt on your computer](http://127.0.0.1:4173). You’ll see the world
 
 ## Open your own project
 
-Copy the [Threadvale example folder](examples/threadvale/) as a starting point. Its `project.json` names the scenes, their positions on the map, and their actors. Keep referenced PNGs beside the JSON file. Scene dimensions are in 8-pixel tiles. Actor positions and sizes are in pixels, measured from the scene’s top-left corner.
+Choose **New project** in the launcher or the editor’s **Project** menu. Enter a name. On macOS, click **Browse** to select an existing parent folder in the system dialog. Cartquilt suggests the full path using your project name. You can edit the path or enter it directly. Choose **Create project** to write `project.json` and open the empty world in the current tab. If the current tab has unsaved edits, Cartquilt offers a new-tab link to keep your draft open. To start with scenes and artwork, copy the [Threadvale example folder](examples/threadvale/) instead.
 
-Stop the running service, then start it with the path to your copy:
+After a restart, choose a project in **Recent projects** to reopen it in the same browser on the same port. You can also choose **Open project** and select its folder or enter the path to its saved JSON file. Give the plugin the same path to load the same project. The editor's readable project URL is assigned for the current server session.
+
+You can also start the service with a specific saved file:
 
 ```sh
 npm run build
 go run ./cmd/cartquilt -project path/to/project.json
 ```
+
+Keep referenced PNGs beside `project.json`. Scene dimensions are in 8-pixel tiles. Actor positions and sizes are in pixels, measured from the scene’s top-left corner. You can also [create a project from Codex](docs/codex-plugin.md#create-a-project).
 
 ## Development and roadmap
 

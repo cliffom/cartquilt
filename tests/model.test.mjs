@@ -85,3 +85,12 @@ test("changing desk and scene preserves selection, placement, camera and history
   assert.equal(w.camera.x, 23);
   assert.equal(w.positions.get(w.selected).x, 8);
 });
+test("an empty saved project opens on the world desk", () => {
+  const empty = structuredClone(response);
+  empty.project.scenes = [];
+  const workspace = new Workspace(decode(empty));
+  assert.equal(workspace.desk, "world");
+  assert.equal(workspace.selected, undefined);
+  assert.equal(workspace.documents.size, 0);
+  assert.equal(workspace.layoutDirty, false);
+});
