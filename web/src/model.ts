@@ -153,12 +153,22 @@ export class Workspace {
       this.positions.set(scene.id, { ...scene.world });
     }
   }
+  documentFor(id: string) {
+    const document = this.documents.get(id);
+    if (!document) throw Error(`Unknown scene: ${id}`);
+    return document;
+  }
+  positionFor(id: string | undefined) {
+    const position = id && this.positions.get(id);
+    if (!position) throw Error(`Missing world position for scene: ${id}`);
+    return position;
+  }
   get active() {
-    return this.documents.get(this.selected)!;
+    return this.documentFor(this.selected);
   }
   get layoutDirty() {
     return this.snapshot.project.scenes.some((s) => {
-      const p = this.positions.get(s.id)!;
+      const p = this.positionFor(s.id);
       return p.x !== s.world.x || p.y !== s.world.y;
     });
   }

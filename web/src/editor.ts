@@ -6,8 +6,10 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text = "") 
   node.textContent = text;
   return node;
 }
-function get<T extends HTMLElement = HTMLElement>(id: string) {
-  return document.getElementById(id) as T;
+function get<T extends HTMLElement = HTMLElement>(id: string | undefined) {
+  const node = id && document.getElementById(id);
+  if (!node) throw Error(`Missing editor element: ${id}`);
+  return node as T;
 }
 function button(label: string, act: () => void, cls = "") {
   const node = el("button", cls, label);
@@ -16,7 +18,7 @@ function button(label: string, act: () => void, cls = "") {
 }
 function img(file: string, cls = "") {
   const node = el("img", cls);
-  node.src = "/assets/" + file;
+  node.src = `/assets/${file}`;
   node.alt = "";
   node.draggable = false;
   return node;
@@ -36,7 +38,7 @@ async function start() {
     actions = get("actions");
   const filter = get<HTMLInputElement>("filter");
   get("project").textContent = project.name;
-  document.title = project.name + " · Cartquilt";
+  document.title = `${project.name} · Cartquilt`;
   let panelButton: HTMLButtonElement | null = null;
   function closePanel(restore = true) {
     document.querySelector("aside.open")?.classList.remove("open");
@@ -45,7 +47,7 @@ async function start() {
     panelButton = null;
   }
   document.querySelectorAll<HTMLButtonElement>("[data-panel]").forEach((b) => {
-    const panel = get(b.dataset.panel!);
+    const panel = get(b.dataset.panel);
     b.setAttribute("aria-controls", panel.id);
     b.setAttribute("aria-expanded", "false");
     const close = button("Close", () => closePanel(), "dismiss");
@@ -100,7 +102,7 @@ async function start() {
   }
   function artwork(s: Scene, interactive = false) {
     const art = el("div", "art");
-    art.style.aspectRatio = s.width + "/" + s.height;
+    art.style.aspectRatio = `${s.width}/${s.height}`;
     art.append(img(s.art, "background"));
     for (const a of s.actors) {
       const sprite = interactive
@@ -110,10 +112,10 @@ async function start() {
         sprite.setAttribute("aria-label", a.name);
         pressed(sprite, w.objects.get(s.id) === a.id);
       }
-      sprite.style.left = (a.x / (s.width * 8)) * 100 + "%";
-      sprite.style.top = (a.y / (s.height * 8)) * 100 + "%";
-      sprite.style.width = (a.width / (s.width * 8)) * 100 + "%";
-      sprite.style.height = (a.height / (s.height * 8)) * 100 + "%";
+      sprite.style.left = `${(a.x / (s.width * 8)) * 100}%`;
+      sprite.style.top = `${(a.y / (s.height * 8)) * 100}%`;
+      sprite.style.width = `${(a.width / (s.width * 8)) * 100}%`;
+      sprite.style.height = `${(a.height / (s.height * 8)) * 100}%`;
       sprite.append(img(a.sprite));
       art.append(sprite);
     }
@@ -138,7 +140,7 @@ async function start() {
         "row",
       );
       row.append(img(s.art), s.name);
-      if (w.documents.get(s.id)!.dirty) row.append(el("span", "badge", "Draft"));
+      if (w.documentFor(s.id).dirty) row.append(el("span", "badge", "Draft"));
       pressed(row, w.selected === s.id);
       scenes.append(row);
     }
@@ -158,7 +160,7 @@ async function start() {
     const crumb = get("crumb");
     crumb.replaceChildren();
     actions.replaceChildren();
-    document.querySelector("h1")!.textContent = sceneMode() ? w.active.scene.name : "World map";
+    get("desk-title").textContent = sceneMode() ? w.active.scene.name : "World map";
     if (sceneMode()) {
       crumb.append(button("← World map", back));
       for (const op of ["undo", "redo"] as const) {
@@ -203,7 +205,7 @@ async function start() {
         const label = el("label", "", axis.toUpperCase()),
           input = el("input"),
           error = el("small", "error");
-        error.id = "error-" + axis;
+        error.id = `error-${axis}`;
         input.setAttribute("aria-describedby", error.id);
         input.setAttribute("aria-label", axis.toUpperCase());
         input.type = "number";
@@ -256,13 +258,13 @@ async function start() {
   function status() {
     const drafts = [...w.documents.values()].filter((d) => d.dirty).map((d) => d.scene.name);
     let message = drafts.length
-      ? "Unsaved in this tab · " + drafts.join(", ")
+      ? `Unsaved in this tab · ${drafts.join(", ")}`
       : "No unsaved scene edits";
     if (sceneMode() && drafts.length && !w.active.dirty)
-      message = w.active.scene.name + " is clean · " + message;
+      message = `${w.active.scene.name} is clean · ${message}`;
     if (w.layoutDirty) message += " · Layout changed in this tab";
     get("location").textContent =
-      project.name + " / " + (sceneMode() ? w.active.scene.name : "World map");
+      `${project.name} / ${sceneMode() ? w.active.scene.name : "World map"}`;
     if (get("status").textContent !== message) get("status").textContent = message;
     get("status").classList.toggle("dirty", !!drafts.length || w.layoutDirty);
     window.onbeforeunload =
@@ -277,11 +279,11 @@ async function start() {
     if (sceneMode()) return;
     const c = w.camera;
     plane.style.transform = `translate(${c.x}px,${c.y}px) scale(${c.zoom})`;
-    get("percentage").textContent = Math.round(c.zoom * 100) + "%";
+    get("percentage").textContent = `${Math.round(c.zoom * 100)}%`;
     for (const card of plane.querySelectorAll<HTMLElement>(".card")) {
-      const p = w.positions.get(card.dataset.id!)!;
-      card.style.left = p.x + "px";
-      card.style.top = p.y + "px";
+      const p = w.positionFor(card.dataset.id);
+      card.style.left = `${p.x}px`;
+      card.style.top = `${p.y}px`;
     }
   }
   function zoom(factor: number, x = canvas.clientWidth / 2, y = canvas.clientHeight / 2) {
@@ -294,7 +296,7 @@ async function start() {
   }
   function fit() {
     const bounds = Array.from(plane.querySelectorAll<HTMLElement>(".card"), (card) => {
-      const p = w.positions.get(card.dataset.id!)!;
+      const p = w.positionFor(card.dataset.id);
       return { ...p, right: p.x + card.offsetWidth, bottom: p.y + card.offsetHeight };
     });
     const l = Math.min(...bounds.map((b) => b.x)),
@@ -338,7 +340,7 @@ async function start() {
     canvas.classList.toggle("scene", sceneMode());
     canvas.setAttribute(
       "aria-label",
-      sceneMode() ? w.active.scene.name + " scene canvas" : "World map canvas",
+      sceneMode() ? `${w.active.scene.name} scene canvas` : "World map canvas",
     );
     get("hints").textContent = sceneMode()
       ? "Select an actor to edit its position"
@@ -360,7 +362,7 @@ async function start() {
     drag = {
       pointer: e.pointerId,
       start: { x: e.clientX, y: e.clientY },
-      origin: { ...(id ? w.positions.get(id)! : w.camera) },
+      origin: { ...(id ? w.positionFor(id) : w.camera) },
       card: id,
       moved: false,
     };
@@ -420,7 +422,7 @@ async function start() {
       e.preventDefault();
       const d = step[e.key];
       if (card && e.shiftKey) {
-        const p = w.positions.get(card)!;
+        const p = w.positionFor(card);
         p.x += 8 * d.x;
         p.y += 8 * d.y;
         selectScene(card);
@@ -448,5 +450,5 @@ async function start() {
   fit();
 }
 start().catch((e) => {
-  get("status").textContent = "Could not open project · " + e.message;
+  get("status").textContent = `Could not open project · ${e.message}`;
 });
