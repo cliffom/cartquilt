@@ -3,6 +3,7 @@ package project
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -91,5 +92,48 @@ func TestArtworkMoveKeepsOtherRegionsAndRejectsOverlap(t *testing.T) {
 	if err != nil || layers[0].Tiles[0].Point != *edit.Position ||
 		layers[0].Tiles[0].Width != original.Width || layers[0].Tiles[1] != wall {
 		t.Fatalf("unexpected moved layer: %+v, %v", layers, err)
+	}
+}
+
+func TestMoveSelectedCellsAcrossPaintStrokes(t *testing.T) {
+	scene := Scene{Width: 8, Height: 4}
+	layer := TileLayer{ID: "room", Tiles: []PaintedTile{
+		{Tile: "floor", TileArea: TileArea{Point{1, 1}, 3, 2}},
+		{Tile: "wall", TileArea: TileArea{Point{4, 0}, 1, 3}},
+	}}
+	edit := ArtworkEdit{Area: &TileArea{Point{2, 1}, 3, 1}, Position: &Point{4, 3}}
+	result, err := moveSelectedTiles(scene, layer, edit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grid := make([]string, scene.Height)
+	for y := range grid {
+		for x := range scene.Width {
+			value := "."
+			for _, tile := range result {
+				if tile.overlaps(TileArea{Point{x, y}, 1, 1}) {
+					if value != "." {
+						t.Fatal("overlapping tiles")
+					}
+					value = tile.Tile[:1]
+				}
+			}
+			grid[y] += value
+		}
+	}
+	want := []string{"....w...", ".f......", ".fffw...", "....ffw."}
+	for y := range want {
+		if grid[y] != want[y] {
+			t.Fatalf("row %d = %s, want %s", y, grid[y], want[y])
+		}
+	}
+	edit.Position = &Point{0, 1}
+	if _, err := moveSelectedTiles(scene, layer, edit); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("move should protect unselected cells")
+	}
+	edit.Position = &edit.Area.Point
+	unchanged, err := moveSelectedTiles(scene, layer, edit)
+	if err != nil || !slices.Equal(unchanged, layer.Tiles) {
+		t.Fatalf("zero-distance move changed the stored regions: %+v, %v", unchanged, err)
 	}
 }

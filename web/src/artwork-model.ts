@@ -23,15 +23,16 @@ export type TileLayer = { id: string; name: string; hidden: boolean; tiles: Pain
 export type ArtworkEdit =
   | { op: "add-layer"; name: string }
   | { op: "remove-layer" | "toggle-layer" | "raise-layer" | "lower-layer"; layerId: string }
+  | { op: "reorder-layer"; layerId: string; adjacentLayerId: string; above: boolean }
   | { op: "paint"; layerId: string; tile: string; area: TileArea }
   | { op: "erase"; layerId: string; area: TileArea }
-  | { op: "move-tile"; layerId: string; tile: string; area: TileArea; position: Point }
+  | { op: "move-tiles"; layerId: string; area: TileArea; position: Point }
   | { op: "place-sprite"; sprite: string; area: TileArea }
   | { op: "move-actor"; actorId: string; position: Point }
   | { op: "remove-actor"; actorId: string }
   | { op: "restore-actor"; actorRecord: string; actorIndex: number; position?: Point };
 
-export type ArtworkMove = Extract<ArtworkEdit, { op: "move-tile" | "move-actor" }>;
+export type ArtworkMove = Extract<ArtworkEdit, { op: "move-tiles" | "move-actor" }>;
 export type ArtworkHistoryEdit =
   | ArtworkMove
   | Extract<ArtworkEdit, { op: "remove-actor" | "restore-actor" }>

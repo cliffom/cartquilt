@@ -47,13 +47,19 @@ In the Navigator, choose **+** next to **Scenes**, enter a name and dimensions i
 
 Right-click a scene in the Navigator or its header on the world map to rename it, duplicate its saved contents, change its border color, or delete it. The Navigator’s **⋯** button and **Shift+F10** open the same menu. Cartquilt asks for confirmation before deleting a scene. Middle-drag anywhere on the world map to pan.
 
+## Edit scene layers
+
+Open a scene and expand the **Editing** control in the **Inspector** to switch layers or change visibility. On a narrow screen, open **Layers & inspector**. **Scene layers** lists **Artwork** (tiles and sprites) above **Blockout** (terrain, spawn markers, and guides). Under **Overlays**, choose **Connections** to edit named entrances and exit triggers. Choosing a layer closes the list and shows its tools. The eyes toggle visibility independently. Expand **Scene details** for dimensions and sprite budgets.
+
+All three use the same 8×8-pixel grid. For example, paint a doorway on a tile, mark that tile walkable in the optional blockout, and put an exit there when it should lead to another scene. Switch layers to edit the same cell at the same zoom and position.
+
 ## Connect two scenes
 
 1. Right-click an empty tile in the destination scene’s editor or world map preview. Choose **+ Entrance**, name the spawn point, and save.
 2. In the source scene, drag across empty tiles to select the trigger area. Right-click inside the selection, choose **+ Exit**, and select the destination scene and entrance. You can also right-click a single tile and enter the trigger’s dimensions in the form.
 3. On the world map, select the arrow to open the source exit for inspection or editing. The Inspector lists the connections for the selected scene.
 
-For keyboard placement, use **Shift+F10** on a world map card and choose **Connections…**. In the scene editor, activate a placement tool and press **Enter** to enter coordinates.
+For keyboard placement, use **Shift+F10** on a world map card and choose **Connections…**. In the scene editor, select **Connections**, activate **+ Entrance** or **+ Exit**, and press **Enter** to enter coordinates.
 
 Relink or remove incoming exits before deleting their destination entrance or scene.
 
@@ -63,21 +69,23 @@ Open a scene and choose **Blockout**. Pick a brush, then click a tile or drag ac
 
 Scenes open centered at 100%, which fits the full scene in the canvas. Scroll to zoom around the pointer, middle-drag to pan, or use the controls below the canvas. **Fit view** or **F** returns to the centered view.
 
-Use **Erase terrain** to clear terrain inside an area. **Erase markers and guides** removes the whole marker or guide when any part of it crosses the area. The **Markers and guides** list lets you remove one by name. Edits save immediately, including changes made with the scene toolbar’s **Undo** and **Redo** controls. The editor keeps up to 50 saved blockout edits per scene in the current tab’s undo history. If a save fails, the warning names the affected scene and stays visible until dismissed or the project is reopened. **Show layer** toggles the blockout on the scene canvas and in its Inspector preview.
+Use **Erase terrain** to clear terrain inside an area. **Erase markers and guides** removes the whole marker or guide when any part of it crosses the area. The **Markers and guides** list lets you remove one by name. Edits save immediately, including changes made with the scene toolbar’s **Undo** and **Redo** controls. The editor keeps up to 50 saved blockout edits per scene in the current tab’s undo history. If a save fails, the warning names the affected scene and stays visible until dismissed or the project is reopened. The eye beside **Blockout** toggles its visibility on the scene canvas.
 
 For agent-assisted authoring, use the bundled [Cartquilt blockout skill](docs/codex-plugin.md#author-a-blockout). This first pass saves layout and planning data for later playtesting.
 
 ## Paint a room and place the Courier
 
-1. Open a blank scene, choose **Artwork**, enter a layer name such as **Room**, and select **Add layer**.
+1. Open a blank scene, choose **Artwork**, click **+** beside **Tile layers**, enter a layer name such as **Room**, and select **Add layer**.
 2. Select **Choose asset**, find **Floor** in the **Tiles** library, and choose **Use tile**. Drag a rectangle. Choose **Wall** for one edge and **Doorway** to mark the opening.
-3. Add a **Decor** layer and paint a **Rug** over the floor. Use the layer controls to change the draw order, hide a layer, or remove it. The list shows the top layer first.
+3. Add a **Decor** layer and paint a **Rug** over the floor. The stack shows the top layer first. Drag a layer name above or below another, or focus its name and press **Alt + ↑/↓**. Each row has an eye to toggle visibility and a trashcan to delete that layer.
 4. In the asset library, choose **Sprites**, select **Courier**, and choose **Use sprite**. Click inside the room. Select the placed actor to save a new position or remove it from the scene. Use **Coordinates** for keyboard placement.
-5. Turn off **Show artwork** to reveal the blockout. Tile artwork and the Courier placement save as you work. Reopen the scene to review the saved layer order and placements.
+5. Turn off the eye beside **Artwork** to reveal the blockout. Tile artwork and the Courier placement save as you work. Reopen the scene to review the saved layer order and placements.
 
-Paint walkable and blocked tiles separately with **Blockout**. Changing the visual doorway leaves the authored terrain intact. Use **Erase tile** to clear paint on the selected layer.
+Paint walkable and blocked tiles separately with **Blockout**. Changing the visual doorway leaves the authored terrain intact. Use **Erase tile** to clear paint on the selected layer. **Paint** resumes the last tile brush after moving or erasing. Click the brush thumbnail to open the library, or right-click a painted cell and choose **Use tile as brush** to sample the active visible tile layer.
 
-Use **Select & move** in Artwork and click a painted tile region on the active layer, then drag it or nudge it with the arrow keys. The Coordinates panel can select a region by tile position. Sprites and painted regions snap their upper-left corner to the 8 × 8 pixel grid. Use the Inspector for exact sprite coordinates in pixels. Tile regions need free space on their own layer.
+Hover over the grid to preview the tile or sprite at its placement size. A dashed outline marks a footprint that extends beyond the scene. Move it inside the grid before clicking to place it.
+
+With **Select & move**, click one cell, drag a rectangle, or Shift-click the opposite corner to extend a selection. Drag inside the selection or press an arrow key to move its painted cells together on the active tile layer. **Coordinates** also accepts a selection origin, width, and height. Sprites and painted regions snap their upper-left corner to the 8 × 8 pixel grid. Use the Inspector for exact sprite coordinates in pixels. Tile regions need free space on their own layer.
 
 **Undo** and **Redo** follow the order of artwork and blockout edits in the scene. Each paint or erase stroke, asset placement, and drag is one step. The editor saves the resulting artwork as you undo or redo.
 

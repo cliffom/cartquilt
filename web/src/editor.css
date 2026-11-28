@@ -268,16 +268,11 @@ h1 {
   flex: none;
   gap: 8px;
 }
-.scene-tool-group + .scene-tool-group {
-  border-inline-start: 1px solid var(--border);
-  padding-inline-start: 8px;
-}
 .scene-toolbar button {
   height: 32px;
   white-space: nowrap;
 }
-.scene-toolbar button[aria-pressed="true"],
-#toggle-blockout[aria-expanded="true"] {
+#connections-tools button[aria-pressed="true"] {
   border-color: var(--accent);
   background: var(--selected);
 }
@@ -427,6 +422,7 @@ h1 {
   pointer-events: none;
 }
 .background {
+  position: relative;
   width: 100%;
   height: 100%;
 }
@@ -455,6 +451,7 @@ button.sprite[aria-pressed="true"] {
   place-items: center;
   cursor: default;
   container-type: size;
+  outline: none;
 }
 #canvas.scene #plane {
   position: relative;
@@ -1149,9 +1146,6 @@ footer {
   .scene-tool-group {
     font-size: 12px;
   }
-  .scene-tool-group + .scene-tool-group {
-    padding-inline-start: 6px;
-  }
   .scene-toolbar button {
     padding-inline: 6px;
   }
@@ -1161,32 +1155,84 @@ footer {
   }
 }
 
-#blockout-tools:not([hidden]) {
-  position: relative;
-  z-index: 3;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 8px 14px;
+#scene-layers {
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--panel);
-  font-size: 12px;
 }
+#scene-layers-title,
+#scene-overlays-title {
+  margin: 0 0 8px;
+}
+.layer-list {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+#layer-switcher {
+  margin-bottom: 10px;
+}
+#editing-target {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bar);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#layer-switcher[open] > summary {
+  margin-bottom: 10px;
+}
+#scene-info > summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+#scene-info {
+  margin-top: 10px;
+}
+#scene-info > summary {
+  font-size: 13px;
+}
+.layer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 2px;
+}
+.layer-row button {
+  border: 1px solid transparent;
+  background: transparent;
+}
+.layer-name {
+  text-align: left;
+  font-size: 14px;
+}
+.layer-name[aria-pressed="true"] {
+  background: var(--selected);
+  border-inline-start: 3px solid var(--accent);
+  padding-inline-start: 8px;
+}
+.layer-eye {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.layer-eye[aria-pressed="false"] {
+  color: var(--muted);
+}
+#connections-tools:not([hidden]),
 .blockout-primary,
 .blockout-secondary,
 #blockout-selection:not([hidden]) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 8px;
-  min-width: 0;
+  gap: 6px;
 }
-.blockout-primary {
-  flex: 1 1 236px;
-}
-.blockout-secondary {
-  margin-inline-start: auto;
+#blockout-tools:not([hidden]),
+#artwork-tools:not([hidden]) {
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
 }
 .blockout-inline-field {
   display: inline-flex;
@@ -1198,8 +1244,12 @@ footer {
 .blockout-inline-field[hidden] {
   display: none;
 }
+.blockout-brush-field {
+  width: 100%;
+}
 .blockout-brush-field > .select-field {
-  width: min(180px, 55vw);
+  min-width: 0;
+  flex: 1;
 }
 #blockout-tools .select-field select {
   height: 30px;
@@ -1250,20 +1300,6 @@ footer {
   border-color: var(--accent);
   color: var(--accent);
 }
-.blockout-visibility {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding-inline: 4px;
-  min-height: 30px;
-  color: var(--muted);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.blockout-visibility input {
-  accent-color: var(--accent);
-  margin: 0;
-}
 #blockout-tools summary {
   display: flex;
   align-items: center;
@@ -1296,12 +1332,7 @@ footer {
   border-color: var(--accent);
 }
 .blockout-popover {
-  position: absolute;
-  inset-block-start: calc(100% + 6px);
-  inset-inline-end: 12px;
-  width: min(320px, calc(100% - 24px));
-  max-height: min(45dvh, 24rem);
-  overflow-y: auto;
+  margin-block-start: 6px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1376,20 +1407,28 @@ footer {
   #blockout-tools summary {
     padding-inline: 6px;
   }
-  .blockout-visibility {
-    padding-inline: 2px;
-  }
 }
 #canvas.painting-blockout,
 #canvas.painting-blockout .art button {
   cursor: crosshair;
+}
+/* Keep visible artwork aligned as a reference when editing the base geometry. */
+.blockout-reference {
+  background-color: var(--canvas);
+}
+.blockout-reference > :is(.background, .artwork-tiles, .sprite) {
+  opacity: 0.25;
+}
+.blockout-secondary details[open],
+.artwork-coordinates {
+  width: 100%;
 }
 .blockout-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-#canvas.showing-blockout-grid .art:not(.blank-art)::after,
+#canvas.showing-blockout-grid .art::after,
 #canvas.showing-artwork-grid .art::after {
   content: "";
   position: absolute;
@@ -1401,20 +1440,9 @@ footer {
   box-shadow: inset 0 0 0 1px var(--border);
 }
 
-#artwork-tools:not([hidden]) {
-  position: relative;
-  z-index: 3;
-  display: grid;
-  gap: 8px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
-  font-size: 12px;
-}
 .artwork-controls,
-.artwork-layer-picker,
 .artwork-icon-group,
-#add-tile-layer-form,
+#add-tile-layer-form:not([hidden]),
 #artwork-save-feedback:not([hidden]) {
   display: flex;
   flex-wrap: wrap;
@@ -1432,6 +1460,7 @@ footer {
 }
 .icon-tooltip {
   position: absolute;
+  pointer-events: none;
   z-index: 2;
   inset-inline-start: 0;
   top: 100%;
@@ -1456,25 +1485,53 @@ footer {
 #artwork-tools input:not([type="checkbox"]) {
   padding: 4px 7px;
 }
+#add-tile-layer-form {
+  flex-wrap: nowrap;
+  width: 100%;
+}
 #tile-layer-name {
-  width: 120px;
+  flex: 1;
+  width: 0;
 }
-#tile-layer {
-  max-width: min(160px, 40vw);
+.artwork-controls > [hidden] { display: none; }
+.tile-stack { min-width: 0; }
+.tile-stack-heading { display: flex; align-items: center; justify-content: space-between; }
+.tile-stack-heading h3 { margin: 0; font-size: 13px; }
+.tile-stack-heading button { width: 28px; height: 28px; padding: 0; color: var(--accent); }
+#tile-stack-empty { margin: 4px 0; color: var(--muted); font-size: 12px; }
+#tile-stack-list { list-style: none; margin: 4px 0 0; padding: 2px; max-height: 12rem; overflow-y: auto; }
+#tile-stack-list:empty { display: none; }
+#tile-stack-list li { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 28px 28px; align-items: center; border-radius: 3px; }
+#tile-stack-list li:has([aria-pressed="true"]) { background: var(--selected); box-shadow: inset 2px 0 var(--accent); }
+#tile-stack-list button { display: flex; align-items: center; justify-content: center; height: 30px; padding: 2px; background: transparent; border: 0; }
+#tile-stack-list button:hover { background: var(--border); }
+#tile-stack-list button:focus-visible { outline-offset: -2px; }
+#tile-stack-list .tile-stack-name { justify-content: start; gap: 4px; cursor: grab; min-width: 0; }
+.tile-stack-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-stack-name svg { flex: none; color: var(--muted); }
+#tile-stack-list .layer-hidden .tile-stack-name, .layer-hidden .tile-stack-eye { color: var(--muted); }
+#tile-stack-list .dragging { opacity: .55; }
+#tile-stack-list [data-drop]::after { content: ""; position: absolute; inset-inline: 0; height: 2px; background: var(--accent); pointer-events: none; }
+#tile-stack-list [data-drop="above"]::after { top: 0; }
+#tile-stack-list [data-drop="below"]::after { bottom: 0; }
+#artwork-swatch {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  image-rendering: pixelated;
 }
+#choose-artwork-asset:has(img:not([hidden])) svg {
+  display: none;
+}
+#paint-artwork[aria-pressed="true"],
 #erase-artwork[aria-pressed="true"],
 #select-artwork[aria-pressed="true"],
-#choose-artwork-asset[data-active],
-#toggle-artwork[aria-expanded="true"] {
+#choose-artwork-asset[data-active] {
   border-color: var(--accent);
   background: var(--selected);
 }
 .artwork-icon-control button:is([aria-pressed="true"], [data-active]) {
   color: var(--accent);
-}
-#tile-layer-visibility[data-layer-hidden] {
-  color: var(--muted);
-  border-style: dashed;
 }
 .actor-actions,
 .asset-picker-filters,
@@ -1589,10 +1646,7 @@ footer {
   color: var(--muted);
 }
 #artwork-coordinate-form {
-  position: absolute;
-  inset-inline-end: 12px;
-  inset-block-start: calc(100% + 6px);
-  width: min(280px, calc(100% - 24px));
+  margin-block-start: 6px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1615,10 +1669,10 @@ footer {
   cursor: url("/eraser-cursor.svg") 5 18, crosshair;
 }
 #canvas.selecting-artwork:where(:not(.moving-artwork, .middle-panning)) button[data-actor-id],
-#canvas.selecting-artwork:where(:not(.moving-artwork, .middle-panning)) .movable-artwork-layer > .artwork-tile {
+#canvas.has-movable-cells:where(:not(.moving-artwork, .middle-panning)) .scene-tile-selection {
   cursor: move;
 }
-.movable-artwork-layer > .artwork-tile {
+#canvas.has-movable-cells .scene-tile-selection {
   pointer-events: auto;
 }
 .artwork-tiles,
@@ -1632,7 +1686,6 @@ footer {
   image-rendering: pixelated;
   background-repeat: repeat;
 }
-#canvas .artwork-selection,
 #canvas .artwork-move-preview {
   position: absolute;
   z-index: 3;
@@ -1650,6 +1703,7 @@ footer {
 #canvas .artwork-move-preview.blocked {
   outline: 2px solid var(--draft);
 }
+#canvas .artwork-placement-preview,
 #canvas .artwork-move-footprint {
   --footprint-color: var(--accent);
   --footprint-line: color-mix(in srgb, var(--footprint-color) 65%, transparent);
@@ -1663,6 +1717,15 @@ footer {
     linear-gradient(to right, var(--footprint-line) 1px, transparent 1px),
     linear-gradient(to bottom, var(--footprint-line) 1px, transparent 1px);
 }
+#canvas .artwork-placement-preview img {
+  display: block;
+  opacity: 0.65;
+  image-rendering: pixelated;
+}
+#canvas .artwork-placement-preview.blocked {
+  outline-style: dashed;
+}
+#canvas .artwork-placement-preview.blocked,
 #canvas .artwork-move-footprint.blocked {
   --footprint-color: var(--draft);
 }

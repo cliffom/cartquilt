@@ -340,7 +340,7 @@ export class SceneDocument {
             return { ...edit, position: { x: previous.x, y: previous.y } };
           return;
         }
-        case "move-tile": {
+        case "move-tiles": {
           const { x, y } = edit.area;
           if (x !== edit.position.x || y !== edit.position.y)
             return { ...edit, area: { ...edit.area, ...edit.position }, position: { x, y } };

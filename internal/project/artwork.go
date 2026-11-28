@@ -26,17 +26,19 @@ type TileLayer struct {
 }
 
 type ArtworkEdit struct {
-	Op            string    `json:"op"`
-	LayerID       string    `json:"layerId,omitempty"`
-	Tile          string    `json:"tile,omitempty"`
-	Sprite        string    `json:"sprite,omitempty"`
-	ActorID       string    `json:"actorId,omitempty"`
-	Position      *Point    `json:"position,omitempty"`
-	Area          *TileArea `json:"area,omitempty"`
-	Name          string    `json:"name,omitempty"`
-	ActorRecord   string    `json:"actorRecord,omitempty"`
-	ActorIndex    *int      `json:"actorIndex,omitempty"`
-	restoreLayers []TileLayer
+	Op              string    `json:"op"`
+	LayerID         string    `json:"layerId,omitempty"`
+	AdjacentLayerID string    `json:"adjacentLayerId,omitempty"`
+	Above           bool      `json:"above,omitempty"`
+	Tile            string    `json:"tile,omitempty"`
+	Sprite          string    `json:"sprite,omitempty"`
+	ActorID         string    `json:"actorId,omitempty"`
+	Position        *Point    `json:"position,omitempty"`
+	Area            *TileArea `json:"area,omitempty"`
+	Name            string    `json:"name,omitempty"`
+	ActorRecord     string    `json:"actorRecord,omitempty"`
+	ActorIndex      *int      `json:"actorIndex,omitempty"`
+	restoreLayers   []TileLayer
 }
 
 type RestoreArtworkInput struct {
@@ -78,6 +80,50 @@ func validateTileLayers(scene Scene) error {
 	return nil
 }
 
+// Move the painted portions of the selection together, keeping the rest of each stroke in place.
+func moveSelectedTiles(scene Scene, layer TileLayer, edit ArtworkEdit) ([]PaintedTile, error) {
+	if layer.Hidden || edit.Area == nil || edit.Position == nil || !edit.Area.inBounds(scene) {
+		return nil, artworkError("select cells inside a visible tile layer")
+	}
+	source := *edit.Area
+	dest := source
+	dest.Point = *edit.Position
+	if !dest.inBounds(scene) {
+		return nil, artworkError("keep the full selection inside the scene")
+	}
+	outside := dest.subtract(source)
+	result := make([]PaintedTile, 0, len(layer.Tiles))
+	moved := false
+	for _, region := range layer.Tiles {
+		for _, area := range outside {
+			if region.overlaps(area) {
+				return nil, artworkError("the destination overlaps another tile region on this layer")
+			}
+		}
+		if !region.overlaps(source) {
+			result = append(result, region)
+			continue
+		}
+		if dest.Point == source.Point {
+			return layer.Tiles, nil
+		}
+		for _, piece := range region.subtract(source) {
+			result = append(result, PaintedTile{Tile: region.Tile, TileArea: piece})
+		}
+		left, top := max(region.X, source.X), max(region.Y, source.Y)
+		result = append(result, PaintedTile{Tile: region.Tile, TileArea: TileArea{
+			Point:  Point{dest.X + left - source.X, dest.Y + top - source.Y},
+			Width:  min(region.X+region.Width, source.X+source.Width) - left,
+			Height: min(region.Y+region.Height, source.Y+source.Height) - top,
+		}})
+		moved = true
+	}
+	if !moved {
+		return nil, artworkError("select at least one painted cell")
+	}
+	return result, nil
+}
+
 func editTileLayers(path string, current Project, scene Scene, edit ArtworkEdit) ([]TileLayer, error) {
 	if edit.Op == "restore-layers" {
 		if edit.restoreLayers == nil {
@@ -104,6 +150,20 @@ func editTileLayers(path string, current Project, scene Scene, edit ArtworkEdit)
 		return slices.Delete(layers, index, index+1), nil
 	case "toggle-layer":
 		layer.Hidden = !layer.Hidden
+	case "reorder-layer":
+		neighbor := slices.IndexFunc(layers, func(layer TileLayer) bool { return layer.ID == edit.AdjacentLayerID })
+		if neighbor < 0 || neighbor == index {
+			return nil, artworkError("choose another layer in this scene as the drop target")
+		}
+		if index < neighbor {
+			neighbor--
+		}
+		if edit.Above {
+			neighbor++
+		}
+		moving := *layer
+		layers = slices.Delete(layers, index, index+1)
+		layers = slices.Insert(layers, neighbor, moving)
 	case "raise-layer":
 		if index+1 < len(layers) {
 			layers[index], layers[index+1] = layers[index+1], layers[index]
@@ -112,6 +172,12 @@ func editTileLayers(path string, current Project, scene Scene, edit ArtworkEdit)
 		if index > 0 {
 			layers[index], layers[index-1] = layers[index-1], layers[index]
 		}
+	case "move-tiles":
+		tiles, err := moveSelectedTiles(scene, *layer, edit)
+		if err != nil {
+			return nil, err
+		}
+		layer.Tiles = tiles
 	case "move-tile":
 		if edit.Area == nil || edit.Position == nil {
 			return nil, artworkError("select a painted tile region and its destination")

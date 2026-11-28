@@ -39,6 +39,7 @@ type TileDrag = GridSurface & {
   pointerId: number;
   start: Point;
   origin: Point;
+  selecting: boolean;
   preview?: HTMLElement;
 };
 
@@ -79,7 +80,12 @@ export function setupConnections(
   canvas: HTMLElement,
   render: () => void,
   gridTools: {
+    selectConnections: () => void;
+    tileSampler: (point: Point) => (() => void) | undefined;
+    hoverArtwork: (art: HTMLElement, point?: Point) => void;
     applyBrush: (scene: Scene, area: TileArea) => boolean;
+    artworkOwnsClick: () => boolean;
+    movingArtwork: () => boolean;
     selectionChanged: () => void;
   },
 ) {
@@ -136,6 +142,7 @@ export function setupConnections(
     kind: Kind,
     point: Entrance & Partial<Pick<Exit, "width" | "height" | "destination">>,
   ) {
+    if (workspace.desk === "scene") gridTools.selectConnections();
     edit = { sceneId: scene.id, kind, id: point.id };
     form.reset();
     status.textContent = "";
@@ -255,6 +262,13 @@ export function setupConnections(
     const cell = tileArea(tile);
     const area = selection && containsTile(selection, tile.x, tile.y) ? selection : cell;
     menuTarget = { sceneId: scene.id, area, anchor };
+    const sample = gridTools.tileSampler(tile);
+    const sampler = get<HTMLButtonElement>("sample-artwork-here");
+    sampler.hidden = sampler.disabled = !sample;
+    sampler.onclick = () => {
+      hideMenu(true);
+      sample?.();
+    };
     const multiTile = isMultiTile(area);
     removals.replaceChildren();
     for (const [kind, points] of [
@@ -343,7 +357,7 @@ export function setupConnections(
   canvas.addEventListener(
     "click",
     (event) => {
-      if (!event.detail) return;
+      if (!event.detail || gridTools.artworkOwnsClick()) return;
       if (suppressTileClick) {
         event.preventDefault();
         event.stopPropagation();
@@ -379,7 +393,9 @@ export function setupConnections(
         grid.anchor.focus({ preventScroll: true });
         return;
       }
-      updateTileSelection(tile ? { sceneId: scene.id, anchor: tile } : undefined);
+      const area = tile && gridTools.movingArtwork() ? tileArea(tile) : undefined;
+      updateTileSelection(tile ? { sceneId: scene.id, anchor: tile, area } : undefined);
+      if (area) grid.anchor.focus({ preventScroll: true });
     },
     true,
   );
@@ -393,11 +409,12 @@ export function setupConnections(
     const start = tileAt(art, event, scene.width, scene.height);
     if (!start) return;
     pressedTile = { art, tile: start };
-    if (placing?.kind === "entrance" || event.shiftKey) return;
+    if (placing?.kind === "entrance" || (event.shiftKey && !gridTools.movingArtwork())) return;
     drag = {
       ...grid,
       pointerId: event.pointerId,
       start,
+      selecting: event.shiftKey,
       origin: { x: event.clientX, y: event.clientY },
     };
     if (placing?.kind === "exit") {
@@ -454,7 +471,7 @@ export function setupConnections(
       finishPlacement("exit", area, scene.id);
       return;
     }
-    if (gridTools.applyBrush(scene, area)) return;
+    if (!current.selecting && gridTools.applyBrush(scene, area)) return;
     updateTileSelection({ sceneId: scene.id, anchor: current.start, area });
   });
   window.addEventListener("blur", clearDrag);
@@ -613,6 +630,16 @@ export function setupConnections(
     },
     resetPlacement,
     selectionFor: selectedTiles,
+    selectArea(scene: Scene, area?: TileArea) {
+      updateTileSelection(
+        area ? { sceneId: scene.id, anchor: { x: area.x, y: area.y }, area } : undefined,
+      );
+    },
+    async clearSelectionAfterErase(scene: Scene, saved: Promise<boolean>) {
+      const original = tileSelection;
+      if (original?.sceneId === scene.id && (await saved) && tileSelection === original)
+        updateTileSelection();
+    },
     editPoint,
     attachGrid(art: HTMLElement, scene: Scene, anchor = canvas) {
       art.dataset.gridScene = scene.id;
@@ -628,10 +655,20 @@ export function setupConnections(
         if (event.pointerType !== "mouse") return;
         overlays.hovered = tileAt(art, event, scene.width, scene.height);
         drawCellHover(overlays, scene);
+        if (workspace.desk === "scene")
+          gridTools.hoverArtwork(
+            art,
+            !event.buttons && !event.shiftKey && menu.hidden && !highlight.hidden
+              ? overlays.hovered
+              : undefined,
+          );
       };
+      art.addEventListener("pointerdown", () => gridTools.hoverArtwork(art));
+      art.addEventListener("wheel", () => gridTools.hoverArtwork(art), { passive: true });
       art.onpointerleave = () => {
         overlays.hovered = undefined;
         highlight.hidden = true;
+        gridTools.hoverArtwork(art);
       };
       art.oncontextmenu = (event) => openGridMenu(event, art, scene, anchor);
     },

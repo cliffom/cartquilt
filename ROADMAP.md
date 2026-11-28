@@ -85,6 +85,8 @@ Provide a **Collision** layer with paint, erase, undo, and visibility controls. 
 
 ### Scene layers
 
+Implemented in the scene editor: select Artwork or Blockout under Scene layers, or Connections under Overlays. Each has an independent visibility toggle on the shared grid. The next top-down preview should start at the player spawn and produce the same route and timing with artwork visible or hidden. [Scene editing decision](docs/decisions/README.md#d15--scene-editing-on-a-shared-grid)
+
 | Layer or view | What the creator edits |
 | --- | --- |
 | Blockout | The base layout. Draw walkable ground, walls, gaps, and platforms using placeholder shapes. A one-way platform is an editable blockout element with its own collision behavior. |

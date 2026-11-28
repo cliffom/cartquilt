@@ -21,13 +21,12 @@ export function setupBlockout(
   canvas: HTMLElement,
   redrawLayer: (sceneId: string) => void,
   selectionFor: (scene: Scene) => TileArea | undefined,
-  stopPlacement: () => void,
+  clearSelectionAfterErase: (scene: Scene, saved: Promise<boolean>) => void,
+  editing: () => boolean,
   saveStateChanged: () => void,
   brushModeChanged: (active: boolean) => void,
   canEdit: () => boolean,
 ) {
-  const toggle = get<HTMLButtonElement>("toggle-blockout");
-  const panel = get("blockout-tools");
   const profile = get<HTMLSelectElement>("blockout-profile");
   const brush = get<HTMLSelectElement>("blockout-brush");
   const swatch = get("blockout-brush-swatch");
@@ -39,7 +38,6 @@ export function setupBlockout(
   const y = get<HTMLInputElement>("blockout-y");
   const width = get<HTMLInputElement>("blockout-width");
   const height = get<HTMLInputElement>("blockout-height");
-  const show = get<HTMLInputElement>("show-blockout");
   const status = get("blockout-status");
   const saveAlert = get("blockout-save-error");
   const saveFeedback = get("blockout-save-feedback");
@@ -48,7 +46,6 @@ export function setupBlockout(
   const setup = get<HTMLDetailsElement>("blockout-coordinates");
   const elements = get<HTMLDetailsElement>("blockout-elements");
   const items = get("blockout-element-list");
-  let open = false;
   let sceneId: string | undefined;
   const pending = new Map<string, number>();
   let restoring = false;
@@ -89,13 +86,7 @@ export function setupBlockout(
     if (saveAlert.textContent !== message) saveAlert.textContent = message;
   }
   function toolActive() {
-    return (
-      open &&
-      workspace.desk === "scene" &&
-      show.checked &&
-      brush.value !== selectBrush &&
-      !restoring
-    );
+    return editing() && workspace.desk === "scene" && brush.value !== selectBrush && !restoring;
   }
   function syncSelection() {
     const scene = workspace.desk === "scene" ? workspace.active.scene : undefined;
@@ -105,9 +96,9 @@ export function setupBlockout(
     apply.disabled = !area || !active;
     applyCoordinates.disabled = !active;
     canvas.classList.toggle("painting-blockout", active);
-    canvas.classList.toggle("showing-blockout-grid", open && !!scene && show.checked);
+    canvas.classList.toggle("showing-blockout-grid", editing() && !!scene);
     selection.hidden = !area;
-    if (open && scene && area) {
+    if (editing() && scene && area) {
       const kinds = new Set<string>();
       let painted = 0;
       for (const region of scene.blockout.terrain) {
@@ -162,22 +153,23 @@ export function setupBlockout(
     const scene = workspace.desk === "scene" ? workspace.active.scene : undefined;
     if (sceneId !== scene?.id) {
       sceneId = scene?.id;
-      open = false;
       brush.value = selectBrush;
       label.value = "";
       coordinates.reset();
       notice("");
     }
-    if (!open) setup.open = elements.open = false;
-    panel.hidden = !open;
-    toggle.setAttribute("aria-expanded", String(open));
+    if (!editing()) {
+      setup.open = elements.open = false;
+      brush.value = selectBrush;
+      notice("");
+    }
     if (scene) {
       profile.value = scene.blockout.profile;
       x.max = String(scene.width - 1);
       y.max = String(scene.height - 1);
       width.max = String(scene.width);
       height.max = String(scene.height);
-      if (open) syncElements(scene);
+      if (editing()) syncElements(scene);
     }
     syncBrush();
     syncSelection();
@@ -232,12 +224,13 @@ export function setupBlockout(
       sync();
       saveStateChanged();
     }
+    return saved;
   }
   async function save(target: string, edit: BlockoutEdit) {
-    if (restoring || !canEdit()) return;
+    if (restoring || !canEdit()) return false;
     const document = workspace.documentFor(target);
     const finish = document.beginBlockoutEdit();
-    await changeBlockout(target, () =>
+    return changeBlockout(target, () =>
       queueWrite(async () => {
         const previous = document.baseline.blockout;
         let saved = false;
@@ -273,7 +266,7 @@ export function setupBlockout(
     if (!toolActive() || scene.id !== sceneId) return false;
     const value = brush.value;
     if (value === terrainEraser || value === elementEraser) {
-      void save(scene.id, { op: value, area });
+      clearSelectionAfterErase(scene, save(scene.id, { op: value, area }));
     } else if (isKeyOf(terrainKinds, value)) {
       void save(scene.id, { op: "paint", kind: value, area });
     } else if (isKeyOf(elementKinds, value)) {
@@ -291,31 +284,12 @@ export function setupBlockout(
     return true;
   }
 
-  toggle.onclick = (event) => {
-    open = !open;
-    if (open) stopPlacement();
-    else notice("");
-    sync();
-    if (open && event.detail === 0) brush.focus();
-  };
-  for (const details of [setup, elements]) {
-    document.addEventListener("pointerdown", (event) => {
-      if (details.open && event.target instanceof Node && !details.contains(event.target)) {
-        details.open = false;
-      }
-    });
-    details.addEventListener("focusout", (event) => {
-      if (event.relatedTarget instanceof Node && !details.contains(event.relatedTarget)) {
-        details.open = false;
-      }
-    });
-  }
   document.addEventListener(
     "keydown",
     (event) => {
       if (event.key !== "Escape") return;
       const details = setup.open ? setup : elements.open ? elements : undefined;
-      if (!details) return;
+      if (!details?.contains(event.target as Node)) return;
       event.preventDefault();
       event.stopPropagation();
       details.open = false;
@@ -323,18 +297,7 @@ export function setupBlockout(
     },
     { capture: true },
   );
-  brush.onchange = () => {
-    if (brush.value !== selectBrush) stopPlacement();
-    if (brush.value !== selectBrush && !show.checked) {
-      show.checked = true;
-      if (sceneId) redrawLayer(sceneId);
-    }
-    sync();
-  };
-  show.onchange = () => {
-    if (sceneId) redrawLayer(sceneId);
-    syncSelection();
-  };
+  brush.onchange = sync;
   profile.onchange = () => {
     if (pending.size) {
       sync();
@@ -359,7 +322,7 @@ export function setupBlockout(
     });
   };
   elements.ontoggle = () => {
-    if (open && workspace.desk === "scene") syncElements(workspace.active.scene);
+    if (editing() && workspace.desk === "scene") syncElements(workspace.active.scene);
   };
   get("dismiss-blockout-save-error").onclick = () => {
     saveErrors.clear();
@@ -376,19 +339,8 @@ export function setupBlockout(
     get busy() {
       return pending.size > 0;
     },
-    get editing() {
-      return open;
-    },
     get saveFailed() {
       return saveErrors.size > 0;
-    },
-    get visible() {
-      return show.checked;
-    },
-    disarm(closeTools = false) {
-      if (closeTools) open = false;
-      brush.value = selectBrush;
-      sync();
     },
   };
 }
@@ -413,7 +365,5 @@ export function drawBlockout(art: HTMLElement, scene: Scene, visible = true) {
     positionTileArea(node, marker, scene);
     layer.append(node);
   }
-  const background = art.querySelector(":scope > .background");
-  if (background) background.after(layer);
-  else art.prepend(layer);
+  art.prepend(layer);
 }

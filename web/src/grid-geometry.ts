@@ -11,8 +11,27 @@ export function tileArea(start: Point, end = start): TileArea {
   };
 }
 
+export function footprintSize(area: Pick<TileArea, "width" | "height">, unitsPerTile: number) {
+  return {
+    width: Math.ceil(area.width / unitsPerTile),
+    height: Math.ceil(area.height / unitsPerTile),
+  };
+}
+
 export function areasOverlap(a: TileArea, b: TileArea) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+export function intersection(a: TileArea, b: TileArea): TileArea | undefined {
+  if (!areasOverlap(a, b)) return;
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  return {
+    x,
+    y,
+    width: Math.min(a.x + a.width, b.x + b.width) - x,
+    height: Math.min(a.y + a.height, b.y + b.height) - y,
+  };
 }
 
 export function overlappingTiles(a: TileArea, b: TileArea) {

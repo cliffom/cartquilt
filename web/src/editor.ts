@@ -19,6 +19,7 @@ import {
   minSceneTilesPerAxis,
   pixelsPerTile,
 } from "./project-constants.js";
+import { setupSceneLayers } from "./scene-layers.js";
 import { gbcSpriteLimits, sceneMetrics } from "./scene-metrics.js";
 
 const launcherPreference = "cartquilt.showLauncher";
@@ -29,6 +30,7 @@ const serviceHealthIntervalMs = 15_000;
 const downloadURLLifetimeMs = 30_000;
 const httpStatus = { noContent: 204, notFound: 404 } as const;
 const sceneCanvasHint = "Drag or Shift-click to select tiles · Right-click to add a connection";
+const moveCanvasHint = "Click or drag to select cells · Drag selection or use arrows to move";
 const brushCanvasHint = "Click or drag to apply the brush · Shift-click to select tiles";
 const viewport = {
   zoomStep: 1.2,
@@ -564,10 +566,21 @@ async function start() {
       exportTiled.disabled = false;
     }
   };
+  const layers = setupSceneLayers(() => {
+    if (connections.placement && !layers.editing("connections")) connections.resetPlacement();
+    render();
+  });
   const connections = setupConnections(w, queueWrite, canvas, render, {
+    selectConnections: () => layers.select("connections"),
+    tileSampler: (point) => artworkTools.tileSampler(point),
+    hoverArtwork: (art, point) => artworkTools.hover(art, point),
     applyBrush: (scene, area) =>
       artworkTools.applyBrush(scene, area) || blockout.applyBrush(scene, area),
+    artworkOwnsClick: () => artworkMove.ownsClick,
+    movingArtwork: () => layers.editing("artwork") && !artworkTools.brushArmed,
     selectionChanged: () => {
+      if (sceneMode() && layers.editing("artwork") && connections.selectionFor(w.active.scene))
+        updateActorSelection();
       blockout.syncSelection();
       artworkTools.syncSelection();
     },
@@ -578,13 +591,8 @@ async function start() {
     canvas,
     redrawBlockout,
     connections.selectionFor,
-    () => {
-      artworkTools.disarm();
-      if (connections.placement) {
-        connections.resetPlacement();
-        render();
-      }
-    },
+    connections.clearSelectionAfterErase,
+    () => layers.editing("blockout"),
     () => {
       updateSceneTools();
       status();
@@ -604,16 +612,12 @@ async function start() {
     queueWrite,
     canvas,
     connections.selectionFor,
-    () => {
-      blockout.disarm(true);
-      if (connections.placement) {
-        connections.resetPlacement();
-        updateSceneTools();
-      }
-    },
+    connections.clearSelectionAfterErase,
+    () => layers.editing("artwork"),
+    () => layers.select("artwork"),
     (id, edit) => {
       if (sceneMode() && w.selected !== id) return;
-      if (edit.op === "move-tile") artworkMove.followTileMove(id, edit);
+      if (edit.op === "move-tiles") artworkMove.followTileMove(id, edit);
       if (
         edit.op === "place-sprite" ||
         edit.op === "move-actor" ||
@@ -626,33 +630,33 @@ async function start() {
       } else {
         const scene = w.documentFor(id).scene;
         const art = plane.querySelector<HTMLElement>(`[data-grid-scene="${CSS.escape(id)}"]`);
-        if (art) drawTileLayers(art, scene, !sceneMode() || artworkTools.visible);
+        if (art) drawTileLayers(art, scene, !sceneMode() || layers.visible("artwork"));
         if (w.selected === id) {
           const preview = details.querySelector<HTMLElement>(".preview .art");
-          if (preview) drawTileLayers(preview, scene, !sceneMode() || artworkTools.visible);
+          if (preview) drawTileLayers(preview, scene, !sceneMode() || layers.visible("artwork"));
         }
       }
-    },
-    () => {
-      draw();
-      inspector();
     },
     () => {
       updateSceneTools();
       status();
     },
-    () => artworkMove.refresh(),
+    () => {
+      artworkMove.refresh();
+      if (sceneMode() && !connections.placement) {
+        const hints = get("hints");
+        if (layers.editing("artwork"))
+          hints.textContent = artworkTools.brushArmed ? brushCanvasHint : moveCanvasHint;
+      }
+    },
     (scene, point) => artworkMove.selectTileAt(scene, point),
     () => !replayingHistory,
   );
   const artworkMove = setupArtworkMove(canvas, w, {
-    enabled: () =>
-      sceneMode() &&
-      !connections.placement &&
-      !blockout.editing &&
-      !artworkTools.brushArmed &&
-      artworkTools.visible,
+    enabled: () => layers.editing("artwork") && !artworkTools.brushArmed,
     layer: artworkTools.moveLayer,
+    selectArea: connections.selectArea,
+    selectionFor: connections.selectionFor,
     selectActor: (id) => {
       if (id) artworkMove.clearSelection();
       updateActorSelection(id);
@@ -675,8 +679,6 @@ async function start() {
     ["exit", exitTool],
   ] as const) {
     tool.onclick = () => {
-      artworkTools.disarm();
-      blockout.disarm();
       if (connections.placement === kind) {
         connections.resetPlacement();
         render();
@@ -785,22 +787,24 @@ async function start() {
   }
   function artwork(s: Scene, interactive = false) {
     const art = el("span", "art");
+    art.classList.toggle("blockout-reference", layers.editing("blockout"));
     art.style.aspectRatio = `${s.width}/${s.height}`;
     art.style.setProperty("--scene-columns", String(s.width));
     art.style.setProperty("--scene-rows", String(s.height));
-    const showArt = !sceneMode() || artworkTools.visible;
+    const showArt = !sceneMode() || layers.visible("artwork");
     if (s.art && showArt) {
       art.append(img(s.art, "background"));
     } else {
       art.classList.add("blank-art");
     }
-    drawBlockout(art, s, !sceneMode() || !showArt || blockout.visible);
+    drawBlockout(art, s, !sceneMode() || layers.visible("blockout"));
     drawTileLayers(art, s, showArt);
     for (const a of showArt ? s.actors : []) {
-      const sprite = interactive
+      const editActor = interactive && layers.editing("artwork");
+      const sprite = editActor
         ? button("", () => selectActor(a.id, "canvas"), "sprite")
         : el("span", "sprite");
-      if (interactive) {
+      if (editActor) {
         sprite.dataset.actorId = a.id;
         sprite.setAttribute("aria-label", a.name);
         pressed(sprite, w.objects.get(s.id) === a.id);
@@ -812,18 +816,21 @@ async function start() {
       sprite.append(img(a.sprite));
       art.append(sprite);
     }
-    drawConnectionMarkers(
-      art,
-      s,
-      interactive ? (kind, point) => connections.editPoint(s, kind, point) : undefined,
-    );
+    if (!sceneMode() || layers.visible("connections"))
+      drawConnectionMarkers(
+        art,
+        s,
+        interactive && layers.editing("connections")
+          ? (kind, point) => connections.editPoint(s, kind, point)
+          : undefined,
+      );
     if (interactive) connections.attachGrid(art, s);
     return art;
   }
   function redrawBlockout(id: string) {
     const scene = w.documents.get(id)?.scene;
     if (!scene) return;
-    const visible = !sceneMode() || !artworkTools.visible || blockout.visible;
+    const visible = !sceneMode() || layers.visible("blockout");
     const art = plane.querySelector<HTMLElement>(`[data-grid-scene="${CSS.escape(id)}"]`);
     if (art) drawBlockout(art, scene, visible);
     if (w.selected === id) {
@@ -871,16 +878,17 @@ async function start() {
         el("p", "empty", scenesInProject.length ? "No matching scenes" : "No scenes yet"),
       );
     if (!sceneMode()) return;
-    objects.append(el("div", "section", "Scene objects"));
-    for (const a of w.active.scene.actors) {
-      const row = button("", () => selectActor(a.id, "navigator"), "row");
-      row.append(img(a.sprite), a.name);
-      pressed(row, w.objects.get(w.active.scene.id) === a.id);
-      objects.append(row);
+    if (layers.editing("artwork") && w.active.scene.actors.length) {
+      objects.append(el("div", "section", "Scene objects"));
+      for (const a of w.active.scene.actors) {
+        const row = button("", () => selectActor(a.id, "navigator"), "row");
+        row.append(img(a.sprite), a.name);
+        pressed(row, w.objects.get(w.active.scene.id) === a.id);
+        objects.append(row);
+      }
     }
-    if (!w.active.scene.actors.length) objects.append(el("p", "empty", "No objects in this scene"));
     const scene = w.active.scene;
-    if (scene.entrances.length || scene.exits.length) {
+    if (layers.editing("connections") && (scene.entrances.length || scene.exits.length)) {
       objects.append(el("div", "section", "Connections"));
       for (const entrance of scene.entrances)
         objects.append(
@@ -943,6 +951,7 @@ async function start() {
     const zoomHost = get(sceneMode() ? "workspace-feedback" : "toolbar");
     if (actions.parentElement !== zoomHost) zoomHost.append(actions);
     percentage.title = sceneMode() ? "Zoom relative to Fit" : "World map zoom";
+    get("inspector-launcher").textContent = sceneMode() ? "Layers & inspector" : "Inspector";
     get("desk-title").textContent = sceneMode() ? w.active.scene.name : "World map";
     if (sceneMode()) {
       crumb.append(button("← World map", back));
@@ -974,12 +983,15 @@ async function start() {
   }
   function inspector() {
     details.replaceChildren();
+    const sceneInfo = get<HTMLDetailsElement>("scene-info");
+    sceneInfo.hidden = true;
     if (!w.selected) {
       details.append(el("p", "empty", "Select a scene to inspect it."));
       return;
     }
     const s = w.active.scene;
-    const a = sceneMode() && s.actors.find((actor) => actor.id === w.objects.get(s.id));
+    const a =
+      layers.editing("artwork") && s.actors.find((actor) => actor.id === w.objects.get(s.id));
     if (a) {
       details.append(
         el("div", "kicker", "Actor"),
@@ -1064,10 +1076,17 @@ async function start() {
       updateActorActions();
       details.append(fields, actorActions);
     } else {
-      details.append(el("div", "kicker", "Scene"), el("h3", "", s.name));
-      const preview = el("div", "preview");
-      preview.append(artwork(s));
-      details.append(preview);
+      const editing = sceneMode();
+      const metricsPanel = editing ? get("scene-metrics") : details;
+      if (editing) {
+        sceneInfo.hidden = false;
+        metricsPanel.replaceChildren();
+      } else {
+        details.append(el("div", "kicker", "Scene"), el("h3", "", s.name));
+        const preview = el("div", "preview");
+        preview.append(artwork(s));
+        details.append(preview);
+      }
       const stats = el("dl");
       const metrics = sceneMetrics(s);
       stats.append(
@@ -1080,10 +1099,11 @@ async function start() {
         el("dt", "", "Triggers"),
         el("dd", "", String(metrics.triggers)),
       );
-      details.append(stats);
+      metricsPanel.append(stats);
       const gbc = metrics.gbc;
       if (gbc && metrics.actors) {
-        details.append(
+        const budgetPanel = gbc.overBudget ? details : metricsPanel;
+        budgetPanel.append(
           el(
             "p",
             gbc.overBudget ? "error" : "empty",
@@ -1365,11 +1385,13 @@ async function start() {
       "aria-label",
       sceneMode() ? `${w.active.scene.name} scene canvas` : "World map canvas",
     );
-    get("hints").textContent = sceneMode()
-      ? sceneCanvasHint
-      : "Drag a scene header to move it · Double-click to open · Drag or Shift-click tiles to select";
+    if (!connections.placement)
+      get("hints").textContent = sceneMode()
+        ? sceneCanvasHint
+        : "Drag a scene header to move it · Double-click to open · Drag or Shift-click tiles to select";
     if (!w.snapshot.project.scenes.length)
       get("hints").textContent = "This world has no scenes yet";
+    layers.sync(sceneMode() ? w.active.scene : undefined);
     blockout.sync();
     artworkTools.sync();
     toolbar();

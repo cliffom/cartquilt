@@ -96,7 +96,17 @@ The asset library lists bundled artwork and standalone PNGs in project-local `as
 
 **Accepted · Interaction design · M6.** Make the library reachable from the project menu before a scene exists, and from Artwork when placing assets. Browse by type or name, preview a selection at pixel scale, then choose to use it. The import view shows format-specific file fields and validates uploads in place. Successful imports return to the library with the new assets visible.
 
+Move selects cells on the active tile layer. A rectangular selection can cut through a paint stroke or span several assets. Moving the selection preserves their spacing and takes one undo step.
+
+Paint remembers the last tile brush during an editor session. Sampling reads the clicked cell on the active visible tile layer, even when another layer or a sprite covers it. Placement previews use the asset’s pixel dimensions and outline every grid cell it occupies.
+
 Artwork and blockout edits share the scene's undo order. Reserve history entries when the editor submits a gesture and retain them after the save succeeds. Tile painting, erasing, and layer changes restore the previous layer data through a revision-checked service operation. Undoing sprite removal restores its original ID, metadata, and draw order.
+
+### D15 · Scene editing on a shared grid
+
+**Accepted · Interaction design · 2026-11-28 · M3/M6.** The Inspector selects one editing layer at a time. Artwork groups the backdrop, ordered tile layers, and sprites. Blockout is an optional base for terrain, spawn markers, and guides. List Artwork directly above Blockout. Group Connections under Overlays for editing named entrances and exit triggers. Use the active editing target as the switcher above its tools. Show the tile stack in Artwork with the topmost layer first. Each row selects a layer and provides visibility and delete controls. Dragging a row saves its new position in one undo step. Keep scene metrics collapsed until requested. Show the scene thumbnail on the world map Inspector and keep actor properties directly accessible when an actor is selected. Connection markers are editor overlays so their bounds remain legible over finished art. The scene header holds scene-wide history.
+
+All layers share the scene origin, 8×8-pixel cells, camera, and tile selection. A sprite can span several cells and retains its pixel dimensions. A doorway, a walkable tile, and an exit can occupy the same cell and each can be edited independently. Selecting Blockout dims visible artwork as a tracing reference. The eyes in the layer list affect only the current view. A future traversal preview should read the saved spawn and gameplay geometry even when their layers are hidden.
 
 ### Decisions due before dependent work
 

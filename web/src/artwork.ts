@@ -4,9 +4,12 @@ import {
   type ArtworkEdit,
   type ArtworkHistoryEdit,
 } from "./artwork-model.js";
+import { fitsScene, setupArtworkPreview } from "./artwork-preview.js";
+import { pixelsPerTile } from "./project-constants.js";
+import { setupTileStack } from "./tile-stack.js";
 import { setupAssetPicker } from "./asset-picker.js";
 import { el, get, positionTileArea } from "./dom.js";
-import type { TileArea } from "./grid-geometry.js";
+import { containsTile, type TileArea } from "./grid-geometry.js";
 import { decode, type HistoryDirection, type Point, type Scene, type Workspace } from "./model.js";
 import type { QueueSceneWrite } from "./scene-actions.js";
 
@@ -17,26 +20,16 @@ export function setupArtwork(
   queueWrite: QueueSceneWrite,
   canvas: HTMLElement,
   selectionFor: (scene: Scene) => TileArea | undefined,
-  stopPlacement: () => void,
+  clearSelectionAfterErase: (scene: Scene, saved: Promise<boolean>) => void,
+  editing: () => boolean,
+  selectArtwork: () => void,
   changed: (sceneId: string, edit: ArtworkEdit | ArtworkHistoryEdit) => void,
-  visibilityChanged: () => void,
   saveStateChanged: () => void,
   selectionModeChanged: () => void,
-  selectTileAt: (scene: Scene, point: Point) => boolean,
+  selectTileAt: (scene: Scene, area: TileArea) => boolean,
   canEdit: () => boolean,
 ) {
-  const toggle = get<HTMLButtonElement>("toggle-artwork");
   const panel = get("artwork-tools");
-  const layerSelect = get<HTMLSelectElement>("tile-layer");
-  const layerForm = get<HTMLFormElement>("add-tile-layer-form");
-  const name = get<HTMLInputElement>("tile-layer-name");
-  const show = get<HTMLInputElement>("show-artwork");
-  const visibility = get<HTMLButtonElement>("tile-layer-visibility");
-  const visibilityIcon = get("tile-layer-visibility-icon");
-  const visibilityLabel = get("tile-layer-visibility-label");
-  const raise = get<HTMLButtonElement>("raise-tile-layer");
-  const lower = get<HTMLButtonElement>("lower-tile-layer");
-  const remove = get<HTMLButtonElement>("remove-tile-layer");
   const apply = get<HTMLButtonElement>("apply-artwork-selection");
   const coords = get<HTMLFormElement>("artwork-coordinate-form");
   const coordApply = get<HTMLButtonElement>("apply-artwork-coordinates");
@@ -48,9 +41,16 @@ export function setupArtwork(
   const failure = get("artwork-error");
   const failureGroup = get("artwork-save-feedback");
   let sceneId: string | undefined;
-  let open = false;
   let layerId: string | undefined;
+  const stack = setupTileStack((id) => {
+    layerId = id;
+    sync();
+  }, save);
   let brush: Brush | undefined;
+  let lastTile: ArtworkAsset | undefined;
+  const preview = setupArtworkPreview();
+  const swatch = get<HTMLImageElement>("artwork-swatch");
+  const paint = get<HTMLButtonElement>("paint-artwork");
   let pending = 0;
   let placingSprite = false;
   const choose = get<HTMLButtonElement>("choose-artwork-asset");
@@ -65,10 +65,8 @@ export function setupArtwork(
   const pickAsset = setupAssetPicker(
     (asset) => {
       if (workspace.desk !== "scene") return;
-      if (!open) {
-        open = true;
-        stopPlacement();
-      }
+      selectArtwork();
+      if (asset.kind === "tile") lastTile = asset;
       brush = asset;
       sync();
     },
@@ -93,8 +91,16 @@ export function setupArtwork(
   );
   const spriteBrush = () => brush !== "erase" && brush?.kind === "sprite";
   const openLibrary = () =>
-    void pickAsset(spriteBrush() ? "sprite" : "tile", workspace.desk === "scene");
+    void pickAsset.open(spriteBrush() ? "sprite" : "tile", workspace.desk === "scene");
   choose.onclick = openLibrary;
+  paint.onclick = () => {
+    if (!lastTile) {
+      void pickAsset.open("tile", true);
+      return;
+    }
+    brush = lastTile;
+    syncSelection();
+  };
   select.onclick = () => {
     brush = undefined;
     syncSelection();
@@ -113,64 +119,65 @@ export function setupArtwork(
   function syncSelection() {
     const scene = activeScene();
     const layer = scene && selectedLayer(scene);
-    const canPaint = !!layer && !layer.hidden && show.checked;
-    const armed = open && show.checked && !!brush && (spriteBrush() || canPaint);
+    const canPaint = !!layer && !layer.hidden;
+    if (!canPaint && brush === "erase") brush = undefined;
+    preview.clear();
+    const armed = editing() && !!brush && (spriteBrush() || canPaint);
     canvas.classList.toggle("placing-artwork", armed);
     canvas.classList.toggle("erasing-artwork", armed && brush === "erase");
-    canvas.classList.toggle("showing-artwork-grid", open);
+    canvas.classList.toggle("showing-artwork-grid", editing());
     erase.disabled = !canPaint;
     erase.setAttribute("aria-pressed", String(armed && brush === "erase"));
-    select.setAttribute("aria-pressed", String(open && !brush));
-    choose.toggleAttribute("data-active", armed && brush !== "erase");
+    select.setAttribute("aria-pressed", String(editing() && !brush));
+    paint.setAttribute(
+      "aria-pressed",
+      String(editing() && brush !== "erase" && brush?.kind === "tile"),
+    );
+    choose.toggleAttribute("data-active", armed && spriteBrush());
+    const asset = brush && brush !== "erase" ? brush : lastTile;
+    swatch.hidden = !asset;
+    if (asset) {
+      const url = artworkImage(asset.kind, asset.id);
+      if (swatch.getAttribute("src") !== url) swatch.src = url;
+      choose.setAttribute("aria-description", asset.name);
+    } else choose.removeAttribute("aria-description");
     activeBrush.textContent = armed
       ? brush === "erase"
         ? "Erasing tiles"
         : (brush?.name ?? "")
       : "";
-    apply.disabled = !armed || !scene || !selectionFor(scene);
-    coordApply.disabled = !armed && !(open && !brush && canPaint);
+    if (editing() && brush && brush !== "erase" && brush.kind === "tile" && !canPaint) {
+      activeBrush.textContent = layer
+        ? `Show ${layer.name} to paint.`
+        : `Add a layer to paint ${brush.name}.`;
+    }
+    apply.hidden = !brush || !scene || !selectionFor(scene);
+    apply.disabled = !armed || apply.hidden;
+    coordApply.disabled = !armed && !(editing() && !brush && canPaint);
     coordApply.textContent = brush ? "Place at coordinates" : "Select at coordinates";
-    for (const field of [width, height]) field.disabled = !brush || spriteBrush();
+    for (const field of [width, height]) field.disabled = spriteBrush();
     selectionModeChanged();
   }
   function sync() {
     const scene = activeScene();
     if (sceneId !== scene?.id) {
       sceneId = scene?.id;
-      open = false;
       brush = undefined;
       layerId = undefined;
-      name.value = "";
       coords.reset();
     }
-    panel.hidden = !open;
-    toggle.setAttribute("aria-expanded", String(open));
+    if (!editing()) {
+      brush = undefined;
+    }
     if (scene) {
       const layers = scene.tileLayers;
       if (!selectedLayer(scene)) layerId = layers.at(-1)?.id;
-      const signature = JSON.stringify(layers.map(({ id, name, hidden }) => [id, name, hidden]));
-      if (layerSelect.dataset.layers !== signature) {
-        layerSelect.dataset.layers = signature;
-        layerSelect.replaceChildren(
-          ...layers.map((layer) => new Option(layer.name, layer.id)).reverse(),
-        );
-        if (!layers.length) layerSelect.append(new Option("No tile layers", ""));
-      }
-      layerSelect.value = layerId ?? "";
-      layerSelect.disabled = !layers.length;
-      const index = layers.findIndex((layer) => layer.id === layerId);
-      visibility.disabled = remove.disabled = index < 0;
-      const hidden = layers[index]?.hidden;
-      visibilityLabel.textContent = hidden ? "Show layer" : "Hide layer";
-      visibilityIcon.setAttribute("href", hidden ? "#icon-eye-off" : "#icon-eye");
-      visibility.toggleAttribute("data-layer-hidden", !!hidden);
-      raise.disabled = index < 0 || index === layers.length - 1;
-      lower.disabled = index <= 0;
       x.max = String(scene.width - 1);
       y.max = String(scene.height - 1);
       width.max = String(scene.width);
       height.max = String(scene.height);
     }
+    stack.sync(scene, layerId);
     syncSelection();
   }
   async function save(
@@ -221,7 +228,6 @@ export function setupArtwork(
         if (direction) document.acceptArtworkHistory(direction, inverse);
         if (sceneId === target && edit.op === "add-layer") {
           layerId = document.scene.tileLayers.at(-1)?.id;
-          if (name.value === edit.name) name.value = "";
         }
         changed(target, edit);
       });
@@ -239,12 +245,14 @@ export function setupArtwork(
     }
   }
   function applyBrush(scene: Scene, area: TileArea) {
-    if (scene.id !== sceneId || !open || !show.checked || !brush) return false;
+    if (scene.id !== sceneId || !editing() || !brush) return false;
     if (!canEdit()) return true;
     if (brush !== "erase" && brush.kind === "sprite") {
       if (placingSprite) return true;
       if (area.width !== 1 || area.height !== 1) {
         feedback.textContent = "Place the sprite on one tile.";
+      } else if (!fitsScene(brush, area, scene)) {
+        feedback.textContent = "The sprite needs room for its full image inside the scene.";
       } else {
         const placing = brush;
         placingSprite = true;
@@ -259,48 +267,13 @@ export function setupArtwork(
       return true;
     }
     const layer = selectedLayer(scene);
-    if (!layer || layer.hidden) return false;
-    void save(
-      scene.id,
-      brush === "erase"
-        ? { op: "erase", layerId: layer.id, area }
-        : { op: "paint", layerId: layer.id, tile: brush.id, area },
-    );
+    if (!layer || layer.hidden) return true;
+    if (brush === "erase") {
+      clearSelectionAfterErase(scene, save(scene.id, { op: "erase", layerId: layer.id, area }));
+    } else {
+      void save(scene.id, { op: "paint", layerId: layer.id, tile: brush.id, area });
+    }
     return true;
-  }
-  toggle.onclick = (event) => {
-    open = !open;
-    if (open) stopPlacement();
-    else brush = undefined;
-    sync();
-    if (open && event.detail === 0) name.focus();
-  };
-  show.onchange = () => {
-    visibilityChanged();
-    syncSelection();
-  };
-  layerSelect.onchange = () => {
-    layerId = layerSelect.value;
-    sync();
-  };
-  layerForm.onsubmit = (event) => {
-    event.preventDefault();
-    if (sceneId && name.value.trim()) void save(sceneId, { op: "add-layer", name: name.value });
-  };
-  for (const [control, op] of [
-    [visibility, "toggle-layer"],
-    [raise, "raise-layer"],
-    [lower, "lower-layer"],
-    [remove, "remove-layer"],
-  ] as const) {
-    control.onclick = () => {
-      const scene = activeScene();
-      const layer = scene && selectedLayer(scene);
-      if (!scene || !layer) return;
-      if (op === "remove-layer" && !window.confirm(`Remove the “${layer.name}” tile layer?`))
-        return;
-      void save(scene.id, { op, layerId: layer.id });
-    };
   }
   apply.onclick = () => {
     const scene = activeScene();
@@ -312,7 +285,21 @@ export function setupArtwork(
     const scene = activeScene();
     if (!scene) return;
     if (!brush) {
-      if (selectTileAt(scene, { x: x.valueAsNumber, y: y.valueAsNumber })) {
+      if (
+        x.valueAsNumber + width.valueAsNumber > scene.width ||
+        y.valueAsNumber + height.valueAsNumber > scene.height
+      ) {
+        feedback.textContent = "Keep the selection inside the scene.";
+        return;
+      }
+      if (
+        selectTileAt(scene, {
+          x: x.valueAsNumber,
+          y: y.valueAsNumber,
+          width: width.valueAsNumber,
+          height: height.valueAsNumber,
+        })
+      ) {
         coords.closest("details")?.removeAttribute("open");
         canvas.focus({ preventScroll: true });
       }
@@ -336,6 +323,48 @@ export function setupArtwork(
     syncSelection,
     applyBrush,
     openLibrary,
+    tileSampler(point: Point) {
+      const scene = activeScene();
+      if (!scene || !editing()) return;
+      const layer = selectedLayer(scene);
+      if (!layer || layer.hidden) return;
+      const id = layer.tiles.find((tile) => containsTile(tile, point.x, point.y))?.tile;
+      if (!id) return;
+      return () => {
+        const sampled: ArtworkAsset = {
+          kind: "tile",
+          id,
+          name: "Sampled tile",
+          width: pixelsPerTile,
+          height: pixelsPerTile,
+        };
+        brush = lastTile = sampled;
+        syncSelection();
+        // Placement only needs the saved tile reference. Resolve its display name separately.
+        void pickAsset
+          .findTile(id)
+          .then((asset) => {
+            if (!asset || lastTile !== sampled) return;
+            lastTile = asset;
+            if (brush === sampled) brush = asset;
+            syncSelection();
+          })
+          .catch(() => {});
+      };
+    },
+    hover(art: HTMLElement, point?: Point) {
+      const scene = activeScene();
+      if (
+        point &&
+        editing() &&
+        scene &&
+        brush &&
+        brush !== "erase" &&
+        (spriteBrush() || selectedLayer(scene)?.hidden === false)
+      ) {
+        preview.show(art, scene, brush, point);
+      } else preview.clear();
+    },
     save,
     dismissTooltip() {
       if (panel.hidden) return false;
@@ -347,18 +376,10 @@ export function setupArtwork(
     },
     moveLayer(scene: Scene) {
       const layer = selectedLayer(scene);
-      return open && !brush && show.checked && !layer?.hidden ? layer : undefined;
+      return editing() && !brush && !layer?.hidden ? layer : undefined;
     },
     get brushArmed() {
-      return open && brush !== undefined && show.checked;
-    },
-    disarm() {
-      open = false;
-      brush = undefined;
-      sync();
-    },
-    get visible() {
-      return show.checked;
+      return editing() && brush !== undefined;
     },
     get busy() {
       return pending > 0;
@@ -389,7 +410,7 @@ export function drawTileLayers(art: HTMLElement, scene: Scene, visible: boolean)
     group.append(surface);
   }
   const after =
-    art.querySelector(":scope > .blockout-layer") ?? art.querySelector(":scope > .background");
+    art.querySelector(":scope > .background") ?? art.querySelector(":scope > .blockout-layer");
   if (after) after.after(group);
   else art.prepend(group);
 }

@@ -93,11 +93,11 @@ export function setupAssetPicker(
       : "No matching assets.";
   }
 
-  async function loadAssets() {
-    const response = await fetch("./api/artwork-assets", { signal: request?.signal });
+  async function loadAssets(signal?: AbortSignal) {
+    const response = await fetch("./api/artwork-assets", { signal });
     if (!response.ok) throw Error("Could not load the asset library.");
     const data: ArtworkAsset[] = await response.json();
-    assets = data.filter(
+    return data.filter(
       (entry) =>
         (entry.kind === "tile" || entry.kind === "sprite") &&
         isArtworkReference(entry.kind, entry.id),
@@ -208,7 +208,7 @@ export function setupAssetPicker(
     try {
       await importArtwork(data);
       saved = true;
-      await loadAssets();
+      assets = await loadAssets();
       const imports = assets.filter((entry) => !earlier.has(entry.id));
       recent = new Set(imports.map((entry) => entry.id));
       kind.value = imports.some((entry) => entry.kind === "tile") ? "tile" : "sprite";
@@ -233,7 +233,7 @@ export function setupAssetPicker(
     }
   };
 
-  return async (initialKind: ArtworkKind, canPlace: boolean) => {
+  async function open(initialKind: ArtworkKind, canPlace: boolean) {
     request?.abort();
     const controller = new AbortController();
     request = controller;
@@ -253,8 +253,11 @@ export function setupAssetPicker(
     dialog.showModal();
     search.focus();
     try {
-      await loadAssets();
-      if (request === controller && !controller.signal.aborted) render();
+      const loaded = await loadAssets(controller.signal);
+      if (request === controller && !controller.signal.aborted) {
+        assets = loaded;
+        render();
+      }
     } catch (error) {
       if (!controller.signal.aborted) status.textContent = (error as Error).message;
     } finally {
@@ -263,5 +266,12 @@ export function setupAssetPicker(
         startImport.disabled = false;
       }
     }
-  };
+  }
+
+  async function findTile(id: string) {
+    const cached = assets.find((entry) => entry.kind === "tile" && entry.id === id);
+    if (cached) return cached;
+    return (await loadAssets()).find((entry) => entry.kind === "tile" && entry.id === id);
+  }
+  return { open, findTile };
 }

@@ -1,11 +1,14 @@
-import {
-  artworkImage,
-  type ArtworkMove,
-  type PaintedTile,
-  type TileLayer,
-} from "./artwork-model.js";
+import { artworkImage, type ArtworkMove, type TileLayer } from "./artwork-model.js";
 import { el, positionTileArea, pointerButton, tileAt } from "./dom.js";
-import { areasOverlap, containsTile, type TileArea } from "./grid-geometry.js";
+import {
+  areasOverlap,
+  containsTile,
+  footprintSize,
+  intersection,
+  overlappingTiles,
+  tileArea,
+  type TileArea,
+} from "./grid-geometry.js";
 import type { Actor, Point, Scene, Workspace } from "./model.js";
 import { pixelsPerTile } from "./project-constants.js";
 
@@ -17,7 +20,7 @@ const arrowSteps: Record<string, Point> = {
   ArrowDown: { x: 0, y: 1 },
 };
 
-type TileSelection = { sceneId: string; layerId: string; tile: PaintedTile };
+type TileSelection = { layerId: string; area: TileArea };
 type Target = { kind: "tile"; selection: TileSelection } | { kind: "actor"; actor: Actor };
 
 export function setupArtworkMove(
@@ -25,18 +28,16 @@ export function setupArtworkMove(
   workspace: Workspace,
   actions: {
     enabled: () => boolean;
+    selectionFor: (scene: Scene) => TileArea | undefined;
+    selectArea: (scene: Scene, area?: TileArea) => void;
     layer: (scene: Scene) => TileLayer | undefined;
     selectActor: (id?: string) => void;
     save: (sceneId: string, edit: ArtworkMove) => Promise<boolean>;
     notice: (text: string) => void;
   },
 ) {
-  const selection = el("span", "artwork-selection");
-  selection.setAttribute("aria-hidden", "true");
   const footprint = el("span", "artwork-move-footprint");
   footprint.setAttribute("aria-hidden", "true");
-  let selected: TileSelection | undefined;
-  let movableLayer: HTMLElement | undefined;
   let drag:
     | {
         scene: Scene;
@@ -54,67 +55,36 @@ export function setupArtworkMove(
   function activeScene() {
     return workspace.desk === "scene" ? workspace.active.scene : undefined;
   }
-  function sameTile(a: PaintedTile, b: PaintedTile) {
-    return (
-      a.tile === b.tile &&
-      a.x === b.x &&
-      a.y === b.y &&
-      a.width === b.width &&
-      a.height === b.height
-    );
-  }
   function sceneArt(scene: Scene) {
     return canvas.querySelector<HTMLElement>(`[data-grid-scene="${CSS.escape(scene.id)}"]`);
   }
-  function currentTile(scene: Scene) {
+  function selectedTiles(scene: Scene): TileSelection | undefined {
     const layer = actions.layer(scene);
-    if (selected?.sceneId !== scene.id || layer?.id !== selected.layerId) return;
-    return layer.tiles.find((tile) => selected && sameTile(tile, selected.tile));
+    const area = actions.selectionFor(scene);
+    if (area && layer?.tiles.some((tile) => areasOverlap(tile, area)))
+      return { layerId: layer.id, area };
   }
   function refresh() {
-    selection.remove();
     const scene = activeScene();
     const enabled = !!scene && actions.enabled();
     if (drag && (!drag.art.isConnected || scene?.id !== drag.scene.id || !enabled)) cancel();
     canvas.classList.toggle("selecting-artwork", enabled);
-    const art = enabled ? sceneArt(scene) : undefined;
-    const layer = enabled ? actions.layer(scene) : undefined;
-    const nextLayer = layer
-      ? (art?.querySelector<HTMLElement>(`.artwork-layer[data-layer="${CSS.escape(layer.id)}"]`) ??
-        undefined)
-      : undefined;
-    if (nextLayer !== movableLayer) {
-      movableLayer?.classList.remove("movable-artwork-layer");
-      nextLayer?.classList.add("movable-artwork-layer");
-      movableLayer = nextLayer;
-    }
-    if (!scene || !art) return;
-    const tile = currentTile(scene);
-    if (!tile) return;
-    positionTileArea(selection, tile, scene);
-    art.append(selection);
+    canvas.classList.toggle("has-movable-cells", enabled && !!selectedTiles(scene));
   }
   function clearSelection() {
-    selected = undefined;
-    refresh();
+    const scene = activeScene();
+    if (scene && actions.selectionFor(scene)) actions.selectArea(scene);
   }
-  function selectTileAt(scene: Scene, point: Point) {
-    const layer = actions.layer(scene);
-    const tile = layer?.tiles.find((tile) => containsTile(tile, point.x, point.y));
-    if (!layer || !tile) {
+  function selectTileAt(scene: Scene, area: TileArea) {
+    if (!actions.layer(scene)?.tiles.some((tile) => areasOverlap(tile, area))) {
       clearSelection();
       return false;
     }
-    selected = { sceneId: scene.id, layerId: layer.id, tile };
-    actions.selectActor();
-    refresh();
+    actions.selectArea(scene, area);
     return true;
   }
   function targetArea(target: Target): TileArea {
-    return target.kind === "tile" ? target.selection.tile : target.actor;
-  }
-  function footprintSize(area: TileArea, scale: number) {
-    return { width: Math.ceil(area.width / scale), height: Math.ceil(area.height / scale) };
+    return target.kind === "tile" ? target.selection.area : target.actor;
   }
   function destination(scene: Scene, target: Target, offset: Point): Point {
     const area = targetArea(target);
@@ -129,13 +99,15 @@ export function setupArtworkMove(
   }
   function blocked(scene: Scene, target: Target, position: Point) {
     if (target.kind !== "tile") return false;
-    const original = target.selection.tile;
+    const original = target.selection.area;
+    const dest = { ...original, ...position };
+    const shared = intersection(original, dest);
     const layer = actions.layer(scene);
     return (
       !layer ||
       layer.id !== target.selection.layerId ||
       layer.tiles.some(
-        (tile) => !sameTile(tile, original) && areasOverlap(tile, { ...original, ...position }),
+        (tile) => overlappingTiles(tile, dest) > (shared ? overlappingTiles(tile, shared) : 0),
       )
     );
   }
@@ -151,19 +123,25 @@ export function setupArtworkMove(
       target.kind === "actor"
         ? { op: "move-actor", actorId: target.actor.id, position }
         : {
-            op: "move-tile",
+            op: "move-tiles",
             layerId: target.selection.layerId,
-            tile: target.selection.tile.tile,
             area: { x, y, width, height },
             position,
           };
     await actions.save(scene.id, edit);
   }
-  function followTileMove(sceneId: string, edit: Extract<ArtworkMove, { op: "move-tile" }>) {
-    if (selected?.sceneId !== sceneId || selected.layerId !== edit.layerId) return;
-    if (!sameTile(selected.tile, { ...edit.area, tile: edit.tile })) return;
-    selected = { ...selected, tile: { ...selected.tile, ...edit.position } };
-    refresh();
+  function followTileMove(sceneId: string, edit: Extract<ArtworkMove, { op: "move-tiles" }>) {
+    const scene = activeScene();
+    if (!scene || scene.id !== sceneId || actions.layer(scene)?.id !== edit.layerId) return;
+    const area = actions.selectionFor(scene);
+    if (
+      area &&
+      area.x === edit.area.x &&
+      area.y === edit.area.y &&
+      area.width === edit.area.width &&
+      area.height === edit.area.height
+    )
+      actions.selectArea(scene, { ...area, ...edit.position });
   }
   function previewPosition(event: PointerEvent, current: NonNullable<typeof drag>) {
     const { scene, target, bounds, start } = current;
@@ -202,19 +180,26 @@ export function setupArtworkMove(
       let target: Target;
       const ghost = el("span", "artwork-move-preview");
       ghost.setAttribute("aria-hidden", "true");
-      if (actor) {
+      const point = tileAt(art, event, scene.width, scene.height);
+      const selected = selectedTiles(scene);
+      if (selected && point && containsTile(selected.area, point.x, point.y)) {
+        target = { kind: "tile", selection: selected };
+        const area = selected.area;
+        for (const tile of actions.layer(scene)?.tiles ?? []) {
+          const piece = intersection(tile, area);
+          if (!piece) continue;
+          const patch = el("span", "artwork-tile");
+          patch.style.backgroundImage = `url("${artworkImage("tile", tile.tile)}")`;
+          patch.style.backgroundSize = `${100 / piece.width}% ${100 / piece.height}%`;
+          positionTileArea(patch, { ...piece, x: piece.x - area.x, y: piece.y - area.y }, area);
+          ghost.append(patch);
+        }
+      } else if (actor) {
         actions.selectActor(actor.id);
         target = { kind: "actor", actor };
         const preview = node.closest("[data-actor-id]")?.querySelector("img")?.cloneNode();
         if (preview) ghost.append(preview);
-      } else {
-        const point = tileAt(art, event, scene.width, scene.height);
-        if (!point || !selectTileAt(scene, point) || !selected) return;
-        target = { kind: "tile", selection: selected };
-        const tile = selected.tile;
-        ghost.style.backgroundImage = `url("${artworkImage("tile", tile.tile)}")`;
-        ghost.style.backgroundSize = `${100 / tile.width}% ${100 / tile.height}%`;
-      }
+      } else return;
       const bounds = art.getBoundingClientRect();
       if (!bounds.width || !bounds.height) return;
       event.preventDefault();
@@ -282,6 +267,10 @@ export function setupArtworkMove(
     cancel();
     if (current.moved && current.art.isConnected && actions.enabled())
       void commit(current.scene, current.target, position);
+    else if (!current.moved && current.target.kind === "tile") {
+      const point = tileAt(current.art, event, current.scene.width, current.scene.height);
+      if (point) actions.selectArea(current.scene, tileArea(point));
+    }
   });
   for (const type of ["pointercancel", "lostpointercapture"] as const) {
     canvas.addEventListener(type, (event) => {
@@ -294,6 +283,7 @@ export function setupArtworkMove(
     "keydown",
     (event) => {
       const scene = activeScene();
+      const selected = scene && selectedTiles(scene);
       const selectedActor = scene && workspace.objects.get(scene.id);
       if (event.key === "Escape" && actions.enabled() && (selected || drag || selectedActor)) {
         cancel();
@@ -309,7 +299,7 @@ export function setupArtworkMove(
       const actor = scene.actors.find((actor) => actor.id === workspace.objects.get(scene.id));
       const target: Target | undefined = actor
         ? { kind: "actor", actor }
-        : selected && currentTile(scene)
+        : selected
           ? { kind: "tile", selection: selected }
           : undefined;
       if (!target) return;
@@ -321,5 +311,13 @@ export function setupArtworkMove(
     true,
   );
 
-  return { refresh, clearSelection, selectTileAt, followTileMove };
+  return {
+    refresh,
+    clearSelection,
+    selectTileAt,
+    followTileMove,
+    get ownsClick() {
+      return ignoreClick;
+    },
+  };
 }
