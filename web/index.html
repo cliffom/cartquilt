@@ -179,11 +179,19 @@
             <div id="crumb"></div>
             <h1 id="desk-title"></h1>
           </div>
-          <div id="actions"></div>
+          <div id="actions" role="group" aria-label="Zoom controls">
+            <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">−</button>
+            <span id="percentage">100%</span>
+            <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+            <button id="fit-view" class="scene-icon-button" type="button" aria-label="Fit view" title="Fit view">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 2.5H2.5V7m10.5-4.5h4.5V7m0 6v4.5H13m-6 0H2.5V13M7 7h6v6H7z" /></svg>
+            </button>
+          </div>
           <div id="scene-toolbar" class="scene-toolbar" role="group" aria-label="Scene tools" hidden>
             <div class="scene-tool-group" role="group" aria-label="Placement">
               <button id="place-entrance" type="button" aria-pressed="false"><span aria-hidden="true">+</span> Entrance</button>
               <button id="place-exit" type="button" aria-pressed="false"><span aria-hidden="true">+</span> Exit</button>
+              <button id="toggle-blockout" type="button" aria-expanded="false" aria-controls="blockout-tools">Blockout</button>
             </div>
             <div class="scene-tool-group" role="group" aria-label="History">
               <button id="undo-scene" class="scene-icon-button" type="button" aria-label="Undo" title="Undo" disabled>
@@ -195,12 +203,49 @@
             </div>
           </div>
         </div>
+        <section id="blockout-tools" aria-label="Blockout tools" hidden>
+          <div class="blockout-primary">
+            <label class="blockout-inline-field blockout-brush-field">Brush <span class="select-field"><span id="blockout-brush-swatch" class="blockout-brush-swatch" aria-hidden="true" hidden></span><select id="blockout-brush"></select></span></label>
+            <label id="blockout-label-field" class="blockout-inline-field" hidden>Label <input id="blockout-label" autocomplete="off" data-1p-ignore /></label>
+            <div id="blockout-selection" hidden>
+              <span id="blockout-selection-info"></span>
+              <button id="apply-blockout-selection" type="button">Apply to selection</button>
+            </div>
+          </div>
+          <div class="blockout-secondary">
+            <label class="blockout-visibility"><input id="show-blockout" type="checkbox" checked /> Show layer</label>
+            <details id="blockout-coordinates" name="blockout-details">
+              <summary>Setup</summary>
+              <div class="blockout-popover">
+                <label class="blockout-inline-field">Movement <span class="select-field"><select id="blockout-profile" aria-disabled="false"></select></span></label>
+                <form id="blockout-coordinate-form" aria-labelledby="blockout-coordinate-title">
+                  <h3 id="blockout-coordinate-title">Tile coordinates</h3>
+                  <div class="blockout-coordinate-fields">
+                    <label>Tile X <input id="blockout-x" type="number" min="0" value="0" required /></label>
+                    <label>Tile Y <input id="blockout-y" type="number" min="0" value="0" required /></label>
+                    <label>Width in tiles <input id="blockout-width" type="number" min="1" value="1" required /></label>
+                    <label>Height in tiles <input id="blockout-height" type="number" min="1" value="1" required /></label>
+                  </div>
+                  <button id="apply-blockout-coordinates" type="submit">Apply brush</button>
+                </form>
+              </div>
+            </details>
+            <details id="blockout-elements" name="blockout-details">
+              <summary>Markers and guides</summary>
+              <div class="blockout-popover"><ul id="blockout-element-list"></ul></div>
+            </details>
+          </div>
+        </section>
         <div id="panels">
           <button data-panel="navigator">Navigator</button
           ><button data-panel="inspector">Inspector</button>
         </div>
         <div id="canvas" tabindex="0" aria-label="World map canvas"><div id="plane"></div></div>
-        <div id="hints" role="status"></div>
+        <div id="workspace-feedback">
+          <div id="hints" role="status"></div>
+          <span id="blockout-status" role="status" hidden></span>
+          <span id="blockout-save-error" role="alert" hidden></span>
+        </div>
       </section>
       <aside id="inspector" aria-label="Inspector">
         <h2>Inspector</h2>

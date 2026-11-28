@@ -3,9 +3,17 @@ import {
   get,
   pointerButton,
   positionContextMenu,
+  positionTileArea,
   pressedPointerButton,
   tileAt,
 } from "./dom.js";
+import {
+  areasOverlap,
+  containsTile,
+  isMultiTile,
+  tileArea,
+  type TileArea,
+} from "./grid-geometry.js";
 import {
   decode,
   type Entrance,
@@ -22,7 +30,7 @@ const worldArrowTipGapPx = 6;
 const worldArrowLaneSpacingPx = 8;
 
 type Kind = "entrance" | "exit";
-type TileArea = Point & Pick<Exit, "width" | "height">;
+
 type ConnectionTarget = { sceneId: string; kind: Kind; id: string };
 type TileSelection = { sceneId: string; anchor: Point; area?: TileArea };
 type GridOverlays = { highlight: HTMLElement; selection: HTMLElement; hovered?: Point };
@@ -33,34 +41,6 @@ type TileDrag = GridSurface & {
   origin: Point;
   preview?: HTMLElement;
 };
-
-function tileArea(start: Point, end = start): TileArea {
-  return {
-    x: Math.min(start.x, end.x),
-    y: Math.min(start.y, end.y),
-    width: Math.abs(end.x - start.x) + 1,
-    height: Math.abs(end.y - start.y) + 1,
-  };
-}
-
-function positionTileArea(node: HTMLElement, area: TileArea, scene: Scene) {
-  node.style.left = `${(area.x / scene.width) * 100}%`;
-  node.style.top = `${(area.y / scene.height) * 100}%`;
-  node.style.width = `${(area.width / scene.width) * 100}%`;
-  node.style.height = `${(area.height / scene.height) * 100}%`;
-}
-
-function areasOverlap(a: TileArea, b: TileArea) {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-}
-
-function isMultiTile(area: TileArea) {
-  return area.width > 1 || area.height > 1;
-}
-
-function containsTile(area: TileArea, x: number, y: number) {
-  return x >= area.x && x < area.x + area.width && y >= area.y && y < area.y + area.height;
-}
 
 function connectionFootprint(point: Entrance | Exit) {
   return "width" in point ? point : tileArea(point);
@@ -98,6 +78,10 @@ export function setupConnections(
   queueWrite: QueueSceneWrite,
   canvas: HTMLElement,
   render: () => void,
+  gridTools: {
+    applyBrush: (scene: Scene, area: TileArea) => boolean;
+    selectionChanged: () => void;
+  },
 ) {
   const menu = get("connection-menu");
   const addEntrance = get<HTMLButtonElement>("add-entrance-here");
@@ -263,6 +247,7 @@ export function setupConnections(
       const document = workspace.documents.get(id);
       if (art && document) drawTileSelection(art, document.scene);
     }
+    gridTools.selectionChanged();
   }
   function showMenu(scene: Scene, tile: Point, x: number, y: number, anchor: HTMLElement) {
     if (drag?.preview || removingFromMenu) return;
@@ -388,6 +373,12 @@ export function setupConnections(
           finishPlacement("entrance", tileArea(tile), scene.id);
         return;
       }
+      if (tile && gridTools.applyBrush(scene, tileArea(tile))) {
+        event.preventDefault();
+        event.stopPropagation();
+        grid.anchor.focus({ preventScroll: true });
+        return;
+      }
       updateTileSelection(tile ? { sceneId: scene.id, anchor: tile } : undefined);
     },
     true,
@@ -463,6 +454,7 @@ export function setupConnections(
       finishPlacement("exit", area, scene.id);
       return;
     }
+    if (gridTools.applyBrush(scene, area)) return;
     updateTileSelection({ sceneId: scene.id, anchor: current.start, area });
   });
   window.addEventListener("blur", clearDrag);
@@ -620,6 +612,7 @@ export function setupConnections(
       canvas.focus({ preventScroll: true });
     },
     resetPlacement,
+    selectionFor: selectedTiles,
     editPoint,
     attachGrid(art: HTMLElement, scene: Scene, anchor = canvas) {
       art.dataset.gridScene = scene.id;

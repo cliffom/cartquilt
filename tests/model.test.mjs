@@ -72,13 +72,15 @@ test("changing desk and scene preserves selection, placement, camera and history
   w.positions.get("willow-bank").x += 8;
   assert.equal(w.layoutDirty, true);
   const willow = w.active;
-  w.desk = "scene";
+  w.openScene("willow-bank");
+  Object.assign(w.viewportCamera, { x: 31, y: -20, zoom: 2 });
   w.objects.set(w.selected, "courier");
   willow.apply({ type: "moveActor", actor: "courier", axis: "x", value: 81 });
   w.desk = "world";
   w.selected = "loom-yard";
   assert.equal(w.active.dirty, false);
-  w.selected = "willow-bank";
+  w.openScene("willow-bank");
+  assert.deepEqual(w.viewportCamera, { x: 0, y: 0, zoom: 1 });
   assert.equal(w.objects.get(w.selected), "courier");
   assert.equal(w.active.scene.actors[0].x, 81);
   w.active.undo();
@@ -243,4 +245,84 @@ test("a saved entrance survives undo and redo of an actor draft", () => {
   doc.redo();
   assert.equal(doc.scene.actors[0].x, originalX + 1);
   assert.deepEqual(doc.scene.entrances, [entrance]);
+});
+
+test("blockout rejects invalid terrain and preserves independent actor history", () => {
+  const workspace = new Workspace(decode(response));
+  const document = workspace.active;
+  assert.deepEqual(document.scene.blockout, { profile: "top-down", terrain: [], elements: [] });
+  const originalX = document.scene.actors[0].x;
+  document.apply({ type: "moveActor", actor: "courier", axis: "x", value: originalX + 1 });
+
+  const fixture = structuredClone(response);
+  const terrain = { kind: "blocked", x: 2, y: 2, width: 3, height: 2 };
+  const blockout = { profile: "platformer", terrain: [terrain] };
+  fixture.project.scenes[0].blockout = blockout;
+  workspace.acceptSceneAction(decode(fixture), document.scene.id, "blockout");
+  document.undo();
+  assert.deepEqual(document.scene.blockout.terrain, [terrain]);
+  assert.equal(document.scene.actors[0].x, originalX);
+
+  blockout.terrain.push({ ...terrain, kind: "water" });
+  assert.throws(() => decode(fixture), /Overlapping blockout terrain/);
+});
+
+test("actor drafts and saved blockout edits use the same scene history", async () => {
+  const doc = new SceneDocument(decode(response).project.scenes[0]);
+  const actorX = doc.scene.actors[0].x;
+  const original = doc.baseline.blockout;
+  const marked = { ...original, profile: "platformer" };
+  const save = async (blockout) => {
+    doc.acceptSceneMetadata({ ...doc.baseline, blockout });
+  };
+
+  doc.apply({ type: "moveActor", actor: "courier", axis: "x", value: actorX + 1 });
+  const finish = doc.beginBlockoutEdit();
+  await save(marked);
+  finish(original);
+  assert.equal(doc.hasBlockoutHistory("undo"), true);
+  await assert.rejects(
+    doc.restoreBlockoutHistory("undo", async () => {
+      throw Error("stale revision");
+    }),
+    /stale revision/,
+  );
+  assert.equal(doc.hasBlockoutHistory("undo"), true);
+  assert.equal(doc.canRedo, false);
+
+  await doc.restoreBlockoutHistory("undo", save);
+  assert.equal(doc.scene.blockout.profile, "top-down");
+  assert.equal(doc.scene.actors[0].x, actorX + 1);
+  doc.undo();
+  assert.equal(doc.scene.actors[0].x, actorX);
+  doc.redo();
+  await doc.restoreBlockoutHistory("redo", save);
+  assert.equal(doc.scene.blockout.profile, "platformer");
+  assert.equal(doc.scene.actors[0].x, actorX + 1);
+
+  await doc.restoreBlockoutHistory("undo", save);
+  doc.apply({ type: "moveActor", actor: "courier", axis: "x", value: actorX + 2 });
+  assert.equal(doc.canRedo, false);
+});
+
+test("a later actor edit stays ahead of a pending blockout save in undo history", async () => {
+  const doc = new SceneDocument(decode(response).project.scenes[0]);
+  const actorX = doc.scene.actors[0].x;
+  const original = doc.baseline.blockout;
+  const finish = doc.beginBlockoutEdit();
+  doc.apply({ type: "moveActor", actor: "courier", axis: "x", value: actorX + 1 });
+  const save = async (blockout) => doc.acceptSceneMetadata({ ...doc.baseline, blockout });
+  await save({ ...original, profile: "platformer" });
+  finish(original);
+
+  doc.undo();
+  assert.equal(doc.scene.actors[0].x, actorX);
+  assert.equal(doc.scene.blockout.profile, "platformer");
+  await doc.restoreBlockoutHistory("undo", save);
+  assert.equal(doc.scene.blockout.profile, "top-down");
+
+  doc.beginBlockoutEdit()(original);
+  doc.beginBlockoutEdit()();
+  assert.equal(doc.canUndo, false);
+  assert.equal(doc.canRedo, true);
 });

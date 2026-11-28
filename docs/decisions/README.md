@@ -78,6 +78,12 @@ Tiled's `.world` format associates each exported map file with a global pixel po
 
 The editor and world map previews share tile hover, rectangle selection, and the grid context menu. The menu lists individual removal actions for connections that overlap the clicked tile or its active selection. Each action confirms the named connection before saving the removal. The entrance action appears only for single-tile contexts and requires an empty tile. Adding an exit from the menu requires an empty trigger area.
 
+### D13 · Persist the blockout authoring layer
+
+**Accepted · Architecture · 2026-11-27 · M3.** Store optional scene blockouts as non-overlapping terrain rectangles and independently placed, scene-scoped markers and guides. Unpainted tiles carry no terrain assignment. A brush replaces or erases the intersecting terrain portion and preserves geometry outside the brush. This lets creators paint over an existing plan while keeping points such as a spawn or checkpoint and guides such as a patrol range or camera frame. Stage exit markers carry planning intent. Scene connections continue to own the linked exits.
+
+The browser and MCP apply the same ordered edit batch through the project revision and atomic write path. MCP can validate and inspect a candidate without saving. The movement profile records design intent for the runtime and Tiled mapping work. Terrain visibility stays an editor setting. Browser history includes actor drafts and blockout changes. Restoring a blockout checks the current project revision and updates only the saved blockout layer.
+
 ### Decisions due before dependent work
 
 | Before | Decide | Evidence needed |

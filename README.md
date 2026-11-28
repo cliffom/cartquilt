@@ -26,7 +26,7 @@ Choose **Open project** and select the included `examples/threadvale` folder to 
 3. Choose **← World map**. Willow Bank is where you placed it, and its thumbnail shows the Courier’s new position. **Draft** marks the scene you edited.
 4. Visit **Loom Yard**, then reopen Willow Bank. Choose **Undo** to move the Courier back and clear the draft. **Redo** restores the move.
 
-**Map controls.** Drag a scene by its header to move and save it. Drag the background to pan, scroll to zoom around the pointer, or choose **Fit** to bring all scenes into view. With the map focused, use the arrow keys to pan and + or − to zoom. Tab to a card, then press Enter to open it or Shift+arrow to move it. On narrow screens, the **Navigator** and **Inspector** buttons sit beneath the toolbar.
+**Map controls.** Drag a scene by its header to move and save it. Drag the background to pan, scroll to zoom around the pointer, or use the **Fit view** icon to bring all scenes into view. With the map focused, use the arrow keys to pan and + or − to zoom. Tab to a card, then press Enter to open it or Shift+arrow to move it. On narrow screens, the **Navigator** and **Inspector** buttons sit beneath the toolbar.
 
 ## Open your own project
 
@@ -56,6 +56,16 @@ Right-click a scene in the Navigator or its header on the world map to rename it
 For keyboard placement, use **Shift+F10** on a world map card and choose **Connections…**. In the scene editor, activate a placement tool and press **Enter** to enter coordinates.
 
 Relink or remove incoming exits before deleting their destination entrance or scene.
+
+## Paint a scene blockout
+
+Open a scene and choose **Blockout**. Pick a brush, then click a tile or drag across the grid to paint a rectangle. To work from an existing selection, use **Select tiles**, drag or Shift-click the corners, then choose a brush and **Apply to selection**. Open **Setup** to change the movement profile or enter a rectangle by tile coordinates.
+
+Scenes open centered at 100%, which fits the full scene in the canvas. Scroll to zoom around the pointer, middle-drag to pan, or use the controls below the canvas. **Fit view** or **F** returns to the centered view.
+
+Use **Erase terrain** to clear terrain inside an area. **Erase markers and guides** removes the whole marker or guide when any part of it crosses the area. The **Markers and guides** list lets you remove one by name. Edits save immediately, including changes made with the scene toolbar’s **Undo** and **Redo** controls. The undo history lasts for the current tab session. **Show layer** changes visibility for the open editor view.
+
+For agent-assisted authoring, use the bundled [Cartquilt blockout skill](docs/codex-plugin.md#author-a-blockout). This first pass saves layout and planning data for later playtesting.
 
 ## Development and roadmap
 

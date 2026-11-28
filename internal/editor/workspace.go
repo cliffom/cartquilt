@@ -83,6 +83,7 @@ func New(initial *project.Saved, web fs.FS) http.Handler {
 	mux.HandleFunc("GET /projects/{slug}/", serveOpenedProject)
 	mux.HandleFunc("POST /projects/{slug}/api/project/scenes", serveOpenedProject)
 	mux.HandleFunc("POST /projects/{slug}/api/project/scenes/{scene}/actions", serveOpenedProject)
+	mux.HandleFunc("PUT /projects/{slug}/api/project/scenes/{scene}/blockout", serveOpenedProject)
 	mux.HandleFunc("POST /api/projects", func(w http.ResponseWriter, r *http.Request) {
 		var input project.CreateInput
 		if !decodeLocalRequest(w, r, &input) {
@@ -135,6 +136,10 @@ func New(initial *project.Saved, web fs.FS) http.Handler {
 }
 
 func decodeLocalRequest(w http.ResponseWriter, r *http.Request, input any) bool {
+	return decodeLocalRequestWithLimit(w, r, input, maxProjectRequestSize)
+}
+
+func decodeLocalRequestWithLimit(w http.ResponseWriter, r *http.Request, input any, limit int64) bool {
 	host, _, err := net.SplitHostPort(r.Host)
 	if err != nil {
 		host = r.Host
@@ -152,7 +157,7 @@ func decodeLocalRequest(w http.ResponseWriter, r *http.Request, input any) bool 
 		http.Error(w, "Project requests require JSON", http.StatusUnsupportedMediaType)
 		return false
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxProjectRequestSize))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(input); err != nil || decoder.Decode(new(any)) != io.EOF {
 		http.Error(w, "Invalid project request", http.StatusBadRequest)

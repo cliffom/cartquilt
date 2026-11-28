@@ -31,6 +31,7 @@ type Scene struct {
 	Actors    []Actor    `json:"actors"`
 	Entrances []Entrance `json:"entrances,omitempty"`
 	Exits     []Exit     `json:"exits,omitempty"`
+	Blockout  *Blockout  `json:"blockout,omitempty"`
 }
 type Project struct {
 	Version int     `json:"version"`
@@ -69,6 +70,11 @@ func decodeSnapshot(data []byte) (Snapshot, error) {
 			(s.Art != "" && !assetPattern.MatchString(s.Art)) || (s.Color != "" && !sceneColorPattern.MatchString(s.Color)) ||
 			!validSceneDimensions(s.Width, s.Height) || s.Actors == nil {
 			return Snapshot{}, fmt.Errorf("invalid scene %q", s.ID)
+		}
+		if s.Blockout != nil {
+			if err := validateBlockout(s, *s.Blockout); err != nil {
+				return Snapshot{}, fmt.Errorf("scene %q: %w", s.Name, err)
+			}
 		}
 		ids[s.ID] = true
 		actors := map[string]bool{}

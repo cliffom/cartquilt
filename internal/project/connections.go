@@ -27,25 +27,11 @@ type Exit struct {
 	Point
 }
 
-type connectionArea struct {
-	Point
-	width, height int
-}
-
-func (e Entrance) area() connectionArea { return connectionArea{e.Point, 1, 1} }
-func (e Exit) area() connectionArea     { return connectionArea{e.Point, e.Width, e.Height} }
-
-func (a connectionArea) inBounds(scene Scene) bool {
-	return a.X >= 0 && a.Y >= 0 && a.width > 0 && a.height > 0 &&
-		a.width <= scene.Width-a.X && a.height <= scene.Height-a.Y
-}
-
-func (a connectionArea) overlaps(b connectionArea) bool {
-	return a.X < b.X+b.width && b.X < a.X+a.width && a.Y < b.Y+b.height && b.Y < a.Y+a.height
-}
+func (e Entrance) area() TileArea { return TileArea{e.Point, 1, 1} }
+func (e Exit) area() TileArea     { return TileArea{e.Point, e.Width, e.Height} }
 
 // Check changed geometry on write so existing overlapping markers can still be opened and repaired.
-func validatePlacement(scene Scene, kind, id string, area connectionArea) error {
+func validatePlacement(scene Scene, kind, id string, area TileArea) error {
 	if !area.inBounds(scene) {
 		return fmt.Errorf("%w: keep the %s within the scene", ErrInvalidInput, kind)
 	}

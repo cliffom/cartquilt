@@ -75,6 +75,8 @@ Track generated visual blockouts, the repo-backed Codex marketplace, and revisio
 
 ## M3 blockout and collision workflow
 
+The first authoring slice saves terrain paint and erasure, marker and guide placement, and movement profiles. The editor's tile selection and the MCP preview/apply workflow share the same saved scene layer. Keep M3 open until traversal, collision inspection, and Tiled export pass both fixtures.
+
 Use “a riverbank with a single bridge, a gate to the east, and room for the Courier” as the fixture. Turn the description into proposed grid dimensions, terrain regions, landmarks, actor footprints, walkable routes, and named entrances. Render a labeled top-down plan with a legend and tile coordinates. Let the creator widen the bridge, move the gate, and regenerate a selected region while preserving edits elsewhere. Replacing placeholder art must preserve trigger IDs, entrances, and collision.
 
 Provide a **Collision** layer with paint, erase, undo, and visibility controls. Start with passable and solid cells plus collidable object footprints. Show blockers with translucent red hatching, outlined footprints, and a text legend. Selecting a blocked cell identifies the terrain or object responsible. Preview movement uses the same occupancy rules as validation. Hiding the overlay changes visibility only. Test a reachable entrance, a blocked bridge, and a moved object that reopens a route. See [the scene-layer decision](docs/decisions/README.md#d03--editable-blockouts-and-collision).
