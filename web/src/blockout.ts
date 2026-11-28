@@ -41,6 +41,7 @@ export function setupBlockout(
   const show = get<HTMLInputElement>("show-blockout");
   const status = get("blockout-status");
   const saveAlert = get("blockout-save-error");
+  const saveFeedback = get("blockout-save-feedback");
   const selection = get("blockout-selection");
   const selectionInfo = get("blockout-selection-info");
   const setup = get<HTMLDetailsElement>("blockout-coordinates");
@@ -82,7 +83,7 @@ export function setupBlockout(
   }
   function syncSaveFeedback() {
     profile.setAttribute("aria-disabled", String(pending.size > 0));
-    saveAlert.hidden = !saveErrors.size;
+    saveFeedback.hidden = !saveErrors.size;
     const message = [...saveErrors.values()].join(" ");
     if (saveAlert.textContent !== message) saveAlert.textContent = message;
   }
@@ -207,15 +208,16 @@ export function setupBlockout(
   ) {
     const name = workspace.documentFor(target).scene.name;
     const queued = pending.get(target) ?? 0;
-    if (!queued) saveErrors.delete(target);
     pending.set(target, queued + 1);
     notice("Saving blockout…");
     syncSelection();
     syncSaveFeedback();
     saveStateChanged();
+    let saved = false;
     try {
       await write();
       redrawLayer(target);
+      saved = true;
     } catch (error) {
       saveErrors.set(target, `Could not save blockout for ${name}. ${(error as Error).message}`);
     } finally {
@@ -223,7 +225,7 @@ export function setupBlockout(
       if (remaining) pending.set(target, remaining);
       else {
         pending.delete(target);
-        if (sceneId === target) notice(saveErrors.has(target) ? "" : success);
+        if (sceneId === target) notice(saved ? success : "");
       }
       syncSaveFeedback();
       sync();
@@ -357,6 +359,12 @@ export function setupBlockout(
   };
   elements.ontoggle = () => {
     if (open && workspace.desk === "scene") syncElements(workspace.active.scene);
+  };
+  get("dismiss-blockout-save-error").onclick = () => {
+    saveErrors.clear();
+    syncSaveFeedback();
+    saveStateChanged();
+    canvas.focus({ preventScroll: true });
   };
 
   return {

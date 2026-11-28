@@ -253,8 +253,11 @@ test("paints, erases, and reopens a saved scene blockout", async ({ page, worksp
   await expect(canvas.locator('[data-terrain="water"]')).toHaveCount(2);
   await tools.getByLabel("Show layer").uncheck();
   await expect(canvas.locator(".blockout-layer")).toHaveCount(0);
+  const inspectorLayer = page.getByLabel("Inspector").locator(".preview .blockout-layer");
+  await expect(inspectorLayer).toHaveCount(0);
   await tools.getByLabel("Show layer").check();
   await expect(ground).toBeVisible();
+  await expect(inspectorLayer).toBeVisible();
 
   await page.reload();
   await card.dblclick();
@@ -311,6 +314,19 @@ test("reports a failed blockout save after opening another scene", async ({ page
   await willow.dblclick();
   await expect(saveError).toBeVisible();
   await expect(canvas.locator('[data-terrain="walkable"]')).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Blockout", exact: true }).click();
+  await page.getByLabel("Brush").selectOption("walkable");
+  await page.mouse.click(...(await tileCenter(canvas, 3, 3)));
+  const terrain = canvas.locator('[data-terrain="walkable"]');
+  await expect(terrain).toHaveCount(1);
+  await expect(terrain).toHaveAttribute("style", /left: 15%;/);
+  await expect(saveError).toBeVisible();
+  await expect(page.locator("#status")).toHaveText("Blockout save failed");
+  await page.getByRole("button", { name: "Dismiss blockout save warnings" }).click();
+  await expect(saveError).toBeHidden();
+  await expect(page.locator("#status")).toHaveText("No unsaved scene edits");
+  await expect(canvas).toBeFocused();
 });
 
 test("zooms and fits the scene while keeping blockout strokes aligned", async ({

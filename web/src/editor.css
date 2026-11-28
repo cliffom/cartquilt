@@ -504,6 +504,14 @@ button.sprite[aria-pressed="true"] {
 #blockout-save-error {
   color: var(--draft);
 }
+#blockout-save-feedback:not([hidden]) {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+#dismiss-blockout-save-error {
+  padding: 2px 6px;
+}
 #details h3 {
   font-size: 19px;
   margin: 8px 0 14px;

@@ -63,7 +63,7 @@ Open a scene and choose **Blockout**. Pick a brush, then click a tile or drag ac
 
 Scenes open centered at 100%, which fits the full scene in the canvas. Scroll to zoom around the pointer, middle-drag to pan, or use the controls below the canvas. **Fit view** or **F** returns to the centered view.
 
-Use **Erase terrain** to clear terrain inside an area. **Erase markers and guides** removes the whole marker or guide when any part of it crosses the area. The **Markers and guides** list lets you remove one by name. Edits save immediately, including changes made with the scene toolbar’s **Undo** and **Redo** controls. The undo history lasts for the current tab session. **Show layer** changes visibility for the open editor view.
+Use **Erase terrain** to clear terrain inside an area. **Erase markers and guides** removes the whole marker or guide when any part of it crosses the area. The **Markers and guides** list lets you remove one by name. Edits save immediately, including changes made with the scene toolbar’s **Undo** and **Redo** controls. The editor keeps up to 50 saved blockout edits per scene in the current tab’s undo history. If a save fails, the warning names the affected scene and stays visible until dismissed or the project is reopened. **Show layer** toggles the blockout on the scene canvas and in its Inspector preview.
 
 For agent-assisted authoring, use the bundled [Cartquilt blockout skill](docs/codex-plugin.md#author-a-blockout). This first pass saves layout and planning data for later playtesting.
 

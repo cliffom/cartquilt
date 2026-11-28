@@ -673,7 +673,7 @@ async function start() {
     } else {
       art.classList.add("blank-art");
     }
-    if (!interactive || blockout.visible) drawBlockout(art, s);
+    drawBlockout(art, s, !sceneMode() || blockout.visible);
     for (const a of s.actors) {
       const sprite = interactive
         ? button("", () => selectActor(a.id, "canvas"), "sprite")
@@ -700,11 +700,12 @@ async function start() {
   function redrawBlockout(id: string) {
     const scene = w.documents.get(id)?.scene;
     if (!scene) return;
+    const visible = !sceneMode() || blockout.visible;
     const art = plane.querySelector<HTMLElement>(`[data-grid-scene="${CSS.escape(id)}"]`);
-    if (art) drawBlockout(art, scene, !sceneMode() || blockout.visible);
+    if (art) drawBlockout(art, scene, visible);
     if (w.selected === id) {
       const preview = details.querySelector<HTMLElement>(".preview .art");
-      if (preview) drawBlockout(preview, scene);
+      if (preview) drawBlockout(preview, scene, visible);
     }
   }
   function navigator() {

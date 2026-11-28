@@ -17,6 +17,7 @@ import {
 export type Point = { x: number; y: number };
 type Camera = Point & { zoom: number };
 const fittedSceneCamera = { x: 0, y: 0, zoom: 1 } as const;
+const maxBlockoutUndoSteps = 50;
 export type Actor = Point & {
   id: string;
   name: string;
@@ -280,6 +281,17 @@ export class SceneDocument {
     this.advanceHistory(direction, { actors: this.scene.actors });
     this.scene = { ...this.scene, actors: entry.actors };
   }
+  private trimBlockoutHistory() {
+    let blockoutSteps = 0;
+    for (let i = this.past.length - 1; i >= 0; i--) {
+      const entry = this.past[i];
+      if ("blockout" in entry && entry.blockout && ++blockoutSteps > maxBlockoutUndoSteps) {
+        // Drop the oldest part of the timeline so remaining actor and blockout edits stay ordered.
+        this.past.splice(0, i + 1);
+        return;
+      }
+    }
+  }
   beginBlockoutEdit() {
     const entry: SceneHistory = { blockout: undefined };
     this.past.push(entry);
@@ -288,6 +300,7 @@ export class SceneDocument {
       if (previous && JSON.stringify(previous) !== JSON.stringify(this.baseline.blockout)) {
         entry.blockout = previous;
         this.future = [];
+        this.trimBlockoutHistory();
       } else {
         this.past.splice(this.past.indexOf(entry), 1);
       }

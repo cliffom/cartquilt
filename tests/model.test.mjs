@@ -326,3 +326,38 @@ test("a later actor edit stays ahead of a pending blockout save in undo history"
   assert.equal(doc.canUndo, false);
   assert.equal(doc.canRedo, true);
 });
+
+test("blockout undo retains only the latest 50 saved edits and supports redoing them", async () => {
+  const doc = new SceneDocument(decode(response).project.scenes[0]);
+  const save = async (blockout) => doc.acceptSceneMetadata({ ...doc.baseline, blockout });
+  const committedEdits = 55;
+  for (let x = 0; x < committedEdits; x++) {
+    const finish = doc.beginBlockoutEdit();
+    const previous = doc.baseline.blockout;
+    const marker = {
+      kind: "player-spawn",
+      id: "spawn",
+      x: x % doc.scene.width,
+      y: 0,
+      width: 1,
+      height: 1,
+    };
+    await save({ ...previous, elements: [marker] });
+    finish(previous);
+  }
+
+  let undone = 0;
+  while (doc.hasBlockoutHistory("undo")) {
+    await doc.restoreBlockoutHistory("undo", save);
+    undone++;
+  }
+  assert.equal(undone, 50);
+  assert.equal(doc.scene.blockout.elements[0].x, 4);
+  assert.equal(doc.canUndo, false);
+
+  while (doc.hasBlockoutHistory("redo")) {
+    await doc.restoreBlockoutHistory("redo", save);
+  }
+  assert.equal(doc.scene.blockout.elements[0].x, (committedEdits - 1) % doc.scene.width);
+  assert.equal(doc.canRedo, false);
+});
