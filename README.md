@@ -67,6 +67,30 @@ Use **Erase terrain** to clear terrain inside an area. **Erase markers and guide
 
 For agent-assisted authoring, use the bundled [Cartquilt blockout skill](docs/codex-plugin.md#author-a-blockout). This first pass saves layout and planning data for later playtesting.
 
+## Paint a room and place the Courier
+
+1. Open a blank scene, choose **Artwork**, enter a layer name such as **Room**, and select **Add layer**.
+2. Select **Choose asset**, find **Floor** in the **Tiles** library, and choose **Use tile**. Drag a rectangle. Choose **Wall** for one edge and **Doorway** to mark the opening.
+3. Add a **Decor** layer and paint a **Rug** over the floor. Use the layer controls to change the draw order, hide a layer, or remove it. The list shows the top layer first.
+4. In the asset library, choose **Sprites**, select **Courier**, and choose **Use sprite**. Click inside the room. Select the placed actor to save a new position or remove it from the scene. Use **Coordinates** for keyboard placement.
+5. Turn off **Show artwork** to reveal the blockout. Tile artwork and the Courier placement save as you work. Reopen the scene to review the saved layer order and placements.
+
+Paint walkable and blocked tiles separately with **Blockout**. Changing the visual doorway leaves the authored terrain intact. Use **Erase tile** to clear paint on the selected layer.
+
+Use **Select & move** in Artwork and click a painted tile region on the active layer, then drag it or nudge it with the arrow keys. The Coordinates panel can select a region by tile position. Sprites and painted regions snap their upper-left corner to the 8 × 8 pixel grid. Use the Inspector for exact sprite coordinates in pixels. Tile regions need free space on their own layer.
+
+**Undo** and **Redo** follow the order of artwork and blockout edits in the scene. Each paint or erase stroke, asset placement, and drag is one step. The editor saves the resulting artwork as you undo or redo.
+
+### Import artwork
+
+Open **Asset library** from the project menu or **Choose asset** from a scene’s Artwork tools. Choose **Import assets**, then select **PNG tilesheet** to split a PNG into 8×8 cells, **PNG sprite** for one sprite image, or **GBC Atlas pack** for a PNG and its matching v1 `.atlas.json`. The library previews the image, reports validation errors in the form, and shows the imported assets after saving. Cartquilt copies the images into the project. Atlas sprite regions are usable as individual frames. Cartquilt preserves the atlas metadata for future animation workflows.
+
+Existing loose PNGs in `assets/tiles/` and `assets/sprites/` still appear in the library. Keep the project folder together when moving or sharing it.
+
+### Export a scene to Tiled
+
+Open a scene and choose **Export scene to Tiled** from the project menu. Extract the ZIP and open the `.tmj` file in Tiled with the adjacent `.tsj` and `images/` folder. The bundle contains the saved artwork layers, actors, blockout, and connection objects. Turn on the **Blockout** and **Connections** layers in Tiled to inspect the authored geometry and destination IDs. Cartquilt continues saving native edits to `project.json`.
+
 ## Development and roadmap
 
 For local development, run `npm run dev` from the repository root and open [the Vite editor](http://127.0.0.1:5173). It starts Air and Vite in the same terminal. Press Ctrl+C to stop both. The first run downloads the pinned Air version and may fetch its Go toolchain.

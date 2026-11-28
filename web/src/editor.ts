@@ -1,4 +1,7 @@
 import "./editor.css";
+import { artworkImage, isArtworkReference } from "./artwork-model.js";
+import { setupArtworkMove } from "./artwork-move.js";
+import { drawTileLayers, setupArtwork } from "./artwork.js";
 import { drawBlockout, setupBlockout } from "./blockout.js";
 import {
   connectionLabel,
@@ -23,6 +26,7 @@ const recentProjectsKey = "cartquilt.recentProjects";
 const recentProjectLimit = 8;
 const serviceHealthTimeoutMs = 3_000;
 const serviceHealthIntervalMs = 15_000;
+const downloadURLLifetimeMs = 30_000;
 const httpStatus = { noContent: 204, notFound: 404 } as const;
 const sceneCanvasHint = "Drag or Shift-click to select tiles · Right-click to add a connection";
 const brushCanvasHint = "Click or drag to apply the brush · Shift-click to select tiles";
@@ -88,7 +92,7 @@ async function accessProject(path: string, name?: string) {
 
 function img(file: string, cls = "") {
   const node = el("img", cls);
-  node.src = `./assets/${file}`;
+  node.src = isArtworkReference("sprite", file) ? artworkImage("sprite", file) : `./assets/${file}`;
   node.alt = "";
   node.draggable = false;
   return node;
@@ -526,9 +530,47 @@ async function start() {
     };
   });
   const queueWrite = createSceneWriteQueue();
+  let replayingHistory = false;
+  const projectMenu = get<HTMLDetailsElement>("project-menu");
+  function dismissProjectMenu() {
+    projectMenu.open = false;
+    projectMenu.querySelector("summary")?.focus();
+  }
+  get("open-project-assets").onclick = () => {
+    dismissProjectMenu();
+    artworkTools.openLibrary();
+  };
+  const exportTiled = get<HTMLButtonElement>("export-scene-tiled");
+  exportTiled.onclick = async () => {
+    if (!sceneMode()) return;
+    const id = w.active.scene.id;
+    const exportError = get("tiled-export-error");
+    dismissProjectMenu();
+    exportTiled.disabled = true;
+    exportError.textContent = "";
+    try {
+      const response = await fetch(`./api/project/scenes/${id}/tiled`);
+      if (!response.ok) throw Error((await response.text()).trim());
+      const url = URL.createObjectURL(await response.blob());
+      const download = el("a");
+      download.href = url;
+      download.download = `${id}-tiled.zip`;
+      download.click();
+      // Leave the URL available until the browser starts consuming the download.
+      setTimeout(() => URL.revokeObjectURL(url), downloadURLLifetimeMs);
+    } catch (error) {
+      exportError.textContent = `Could not export to Tiled. ${(error as Error).message}`;
+    } finally {
+      exportTiled.disabled = false;
+    }
+  };
   const connections = setupConnections(w, queueWrite, canvas, render, {
-    applyBrush: (scene, area) => blockout.applyBrush(scene, area),
-    selectionChanged: () => blockout.syncSelection(),
+    applyBrush: (scene, area) =>
+      artworkTools.applyBrush(scene, area) || blockout.applyBrush(scene, area),
+    selectionChanged: () => {
+      blockout.syncSelection();
+      artworkTools.syncSelection();
+    },
   });
   const blockout = setupBlockout(
     w,
@@ -537,6 +579,7 @@ async function start() {
     redrawBlockout,
     connections.selectionFor,
     () => {
+      artworkTools.disarm();
       if (connections.placement) {
         connections.resetPlacement();
         render();
@@ -552,8 +595,76 @@ async function start() {
       if (hints.textContent === sceneCanvasHint || hints.textContent === brushCanvasHint) {
         hints.textContent = active ? brushCanvasHint : sceneCanvasHint;
       }
+      artworkMove.refresh();
     },
+    () => !replayingHistory,
   );
+  const artworkTools = setupArtwork(
+    w,
+    queueWrite,
+    canvas,
+    connections.selectionFor,
+    () => {
+      blockout.disarm(true);
+      if (connections.placement) {
+        connections.resetPlacement();
+        updateSceneTools();
+      }
+    },
+    (id, edit) => {
+      if (sceneMode() && w.selected !== id) return;
+      if (edit.op === "move-tile") artworkMove.followTileMove(id, edit);
+      if (
+        edit.op === "place-sprite" ||
+        edit.op === "move-actor" ||
+        edit.op === "remove-actor" ||
+        edit.op === "restore-actor"
+      ) {
+        draw();
+        navigator();
+        inspector();
+      } else {
+        const scene = w.documentFor(id).scene;
+        const art = plane.querySelector<HTMLElement>(`[data-grid-scene="${CSS.escape(id)}"]`);
+        if (art) drawTileLayers(art, scene, !sceneMode() || artworkTools.visible);
+        if (w.selected === id) {
+          const preview = details.querySelector<HTMLElement>(".preview .art");
+          if (preview) drawTileLayers(preview, scene, !sceneMode() || artworkTools.visible);
+        }
+      }
+    },
+    () => {
+      draw();
+      inspector();
+    },
+    () => {
+      updateSceneTools();
+      status();
+    },
+    () => artworkMove.refresh(),
+    (scene, point) => artworkMove.selectTileAt(scene, point),
+    () => !replayingHistory,
+  );
+  const artworkMove = setupArtworkMove(canvas, w, {
+    enabled: () =>
+      sceneMode() &&
+      !connections.placement &&
+      !blockout.editing &&
+      !artworkTools.brushArmed &&
+      artworkTools.visible,
+    layer: artworkTools.moveLayer,
+    selectActor: (id) => {
+      if (id) artworkMove.clearSelection();
+      updateActorSelection(id);
+    },
+    save: async (id, edit) => {
+      if (artworkTools.busy || blockout.busy) return false;
+      return artworkTools.save(id, edit);
+    },
+    notice: (text) => {
+      get("artwork-feedback").textContent = text;
+    },
+  });
   const sceneToolbar = get("scene-toolbar");
   const entranceTool = get<HTMLButtonElement>("place-entrance");
   const exitTool = get<HTMLButtonElement>("place-exit");
@@ -564,6 +675,7 @@ async function start() {
     ["exit", exitTool],
   ] as const) {
     tool.onclick = () => {
+      artworkTools.disarm();
       blockout.disarm();
       if (connections.placement === kind) {
         connections.resetPlacement();
@@ -656,29 +768,40 @@ async function start() {
     status();
   }
   function selectActor(id: string, source: "navigator" | "canvas") {
-    w.objects.set(w.active.scene.id, id);
-    navigator();
-    draw();
-    inspector();
+    artworkMove.clearSelection();
+    updateActorSelection(id);
     const root = source === "navigator" ? get("objects") : plane;
     root.querySelector<HTMLButtonElement>("[aria-pressed=true]")?.focus({ preventScroll: true });
+  }
+  function updateActorSelection(id?: string) {
+    const sceneId = w.active.scene.id;
+    if (id === w.objects.get(sceneId)) return;
+    if (id) w.objects.set(sceneId, id);
+    else w.objects.delete(sceneId);
+    for (const sprite of plane.querySelectorAll<HTMLButtonElement>("button[data-actor-id]"))
+      pressed(sprite, sprite.dataset.actorId === id);
+    navigator();
+    inspector();
   }
   function artwork(s: Scene, interactive = false) {
     const art = el("span", "art");
     art.style.aspectRatio = `${s.width}/${s.height}`;
     art.style.setProperty("--scene-columns", String(s.width));
     art.style.setProperty("--scene-rows", String(s.height));
-    if (s.art) {
+    const showArt = !sceneMode() || artworkTools.visible;
+    if (s.art && showArt) {
       art.append(img(s.art, "background"));
     } else {
       art.classList.add("blank-art");
     }
-    drawBlockout(art, s, !sceneMode() || blockout.visible);
-    for (const a of s.actors) {
+    drawBlockout(art, s, !sceneMode() || !showArt || blockout.visible);
+    drawTileLayers(art, s, showArt);
+    for (const a of showArt ? s.actors : []) {
       const sprite = interactive
         ? button("", () => selectActor(a.id, "canvas"), "sprite")
         : el("span", "sprite");
       if (interactive) {
+        sprite.dataset.actorId = a.id;
         sprite.setAttribute("aria-label", a.name);
         pressed(sprite, w.objects.get(s.id) === a.id);
       }
@@ -700,7 +823,7 @@ async function start() {
   function redrawBlockout(id: string) {
     const scene = w.documents.get(id)?.scene;
     if (!scene) return;
-    const visible = !sceneMode() || blockout.visible;
+    const visible = !sceneMode() || !artworkTools.visible || blockout.visible;
     const art = plane.querySelector<HTMLElement>(`[data-grid-scene="${CSS.escape(id)}"]`);
     if (art) drawBlockout(art, scene, visible);
     if (w.selected === id) {
@@ -808,13 +931,15 @@ async function start() {
     if (!sceneMode()) return;
     pressed(entranceTool, connections.placement === "entrance");
     pressed(exitTool, connections.placement === "exit");
-    undoTool.disabled = blockout.busy || !w.active.canUndo;
-    redoTool.disabled = blockout.busy || !w.active.canRedo;
+    const saving = blockout.busy || artworkTools.busy;
+    undoTool.disabled = saving || !w.active.canUndo;
+    redoTool.disabled = saving || !w.active.canRedo;
   }
   function toolbar() {
     const crumb = get("crumb");
     crumb.replaceChildren();
     sceneToolbar.hidden = !sceneMode();
+    exportTiled.hidden = !sceneMode();
     const zoomHost = get(sceneMode() ? "workspace-feedback" : "toolbar");
     if (actions.parentElement !== zoomHost) zoomHost.append(actions);
     percentage.title = sceneMode() ? "Zoom relative to Fit" : "World map zoom";
@@ -827,9 +952,17 @@ async function start() {
     }
   }
   async function history(op: "undo" | "redo") {
-    if (blockout.busy || !sceneMode()) return;
-    if (w.active.hasBlockoutHistory(op)) {
-      await blockout.history(op);
+    if (replayingHistory || blockout.busy || artworkTools.busy || !sceneMode()) return;
+    const blockoutStep = w.active.hasBlockoutHistory(op);
+    const artworkStep = w.active.artworkHistory(op);
+    if (blockoutStep || artworkStep) {
+      replayingHistory = true;
+      try {
+        if (artworkStep) await artworkTools.save(w.active.scene.id, artworkStep, op);
+        else await blockout.history(op);
+      } finally {
+        replayingHistory = false;
+      }
       return;
     }
     w.active[op]();
@@ -854,6 +987,36 @@ async function start() {
         el("div", "section", "Position in pixels"),
       );
       const fields = el("div", "fields");
+      const actorId = a.id;
+      const actorPosition = () =>
+        w.documents.get(s.id)?.scene.actors.find((actor) => actor.id === actorId);
+      const savePosition = button("Save position", () => {
+        const actor = actorPosition();
+        if (!actor) return;
+        savePosition.disabled = removeActor.disabled = true;
+        void artworkTools
+          .save(
+            s.id,
+            { op: "move-actor", actorId: a.id, position: { x: actor.x, y: actor.y } },
+            "draft",
+          )
+          .finally(updateActorActions);
+      });
+      const removeActor = button("Remove actor", () => {
+        if (!window.confirm(`Remove “${a.name}” from this scene?`)) return;
+        savePosition.disabled = removeActor.disabled = true;
+        void artworkTools.save(s.id, { op: "remove-actor", actorId: a.id }).finally(() => {
+          if (sceneMode() && w.selected === s.id && !actorPosition())
+            canvas.focus({ preventScroll: true });
+          updateActorActions();
+        });
+      });
+      function updateActorActions() {
+        const actor = actorPosition();
+        const saved = w.documents.get(s.id)?.baseline.actors.find((entry) => entry.id === actorId);
+        savePosition.disabled = !actor || !saved || (actor.x === saved.x && actor.y === saved.y);
+        removeActor.disabled = !actor;
+      }
       for (const axis of ["x", "y"] as const) {
         const label = el("label", "", axis.toUpperCase()),
           input = el("input"),
@@ -872,6 +1035,10 @@ async function start() {
           group = Symbol();
         };
         input.oninput = () => {
+          if (artworkTools.busy || replayingHistory) {
+            input.value = String(actorPosition()?.[axis] ?? a[axis]);
+            return;
+          }
           try {
             w.active.apply(
               { type: "moveActor", actor: a.id, axis, value: input.valueAsNumber },
@@ -883,6 +1050,7 @@ async function start() {
             toolbar();
             navigator();
             status();
+            updateActorActions();
           } catch (e) {
             error.textContent = (e as Error).message;
             input.setAttribute("aria-invalid", "true");
@@ -891,7 +1059,10 @@ async function start() {
         label.append(input, error);
         fields.append(label);
       }
-      details.append(fields);
+      const actorActions = el("div", "actor-actions");
+      actorActions.append(savePosition, removeActor);
+      updateActorActions();
+      details.append(fields, actorActions);
     } else {
       details.append(el("div", "kicker", "Scene"), el("h3", "", s.name));
       const preview = el("div", "preview");
@@ -1006,7 +1177,7 @@ async function start() {
 
   function status() {
     const drafts = [...w.documents.values()].filter((d) => d.dirty).map((d) => d.scene.name);
-    const hasUnsavedEdits = !!drafts.length || w.layoutDirty || blockout.busy;
+    const hasUnsavedEdits = !!drafts.length || w.layoutDirty || blockout.busy || artworkTools.busy;
     let message = drafts.length
       ? `Unsaved in this tab · ${drafts.join(", ")}`
       : blockout.busy
@@ -1016,6 +1187,7 @@ async function start() {
           : "No unsaved scene edits";
     if (sceneMode() && drafts.length && !w.active.dirty)
       message = `${w.active.scene.name} is clean · ${message}`;
+    if (artworkTools.saveFailed) message += " · Artwork save failed";
     if (layoutError && w.layoutDirty) message += ` · ${layoutError}`;
     else if (savingLayout) message += " · Saving layout…";
     else if (w.layoutDirty) message += " · Unsaved layout";
@@ -1097,6 +1269,7 @@ async function start() {
       plane.style.setProperty("--ratio", String(w.active.scene.width / w.active.scene.height));
       plane.append(artwork(w.active.scene, true));
       positionCamera();
+      artworkMove.refresh();
       return;
     }
     const groups = new Map<string, ReturnType<typeof sceneConnections>>();
@@ -1198,6 +1371,7 @@ async function start() {
     if (!w.snapshot.project.scenes.length)
       get("hints").textContent = "This world has no scenes yet";
     blockout.sync();
+    artworkTools.sync();
     toolbar();
     draw();
     navigator();
@@ -1342,6 +1516,7 @@ async function start() {
   document.addEventListener("keydown", (e) => {
     if (document.querySelector("dialog[open]")) return;
     if (e.key === "Escape") {
+      if (artworkTools.dismissTooltip()) return;
       const card = plane.querySelector<HTMLElement>(
         ".card:not([data-tooltip-dismissed]):is(:focus-visible, :has(.scene-card-footer:hover))",
       );
@@ -1355,11 +1530,11 @@ async function start() {
       return;
     }
     const key = e.key.toLowerCase();
-    const typingBlockout =
-      e.target instanceof HTMLInputElement && e.target.closest("#blockout-tools");
+    const typingToolInput =
+      e.target instanceof HTMLInputElement && e.target.closest("#blockout-tools, #artwork-tools");
     const historyShortcut =
       (key === "z" && (e.ctrlKey || e.metaKey)) || (key === "y" && e.ctrlKey && !e.metaKey);
-    if (sceneMode() && !typingBlockout && historyShortcut) {
+    if (sceneMode() && !typingToolInput && historyShortcut) {
       e.preventDefault();
       void history(key === "y" || e.shiftKey ? "redo" : "undo");
     }

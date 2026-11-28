@@ -54,7 +54,7 @@ The comparison baseline is the published 4.3.2 release, reviewed 2026-11-26. Car
 | --- | --- | --- |
 | World and scene authoring | Partial. Arrange existing scenes and move an existing actor in a tab. | M1–M3. Create scenes, place actors and triggers, save, reopen, and trace a transition to its source. |
 | Collision and gameplay modes | Planned | M3, M5, M8. Compare authored collision with player and actor behavior on target. Exercise directional edges, ladders, and movement rules in the applicable scene types. |
-| Visual assets and audio | Partial. Render supplied backgrounds and sprites. | M6. Complete the asset workflows below and verify their output in a running scene. |
+| Visual assets and audio | Partial. Paint the bundled room tiles on saved layers and place the Courier. | M6. Complete the asset workflows below and verify their output in a running scene. |
 | Event authoring and debugging | Planned | M5–M7. Map each event family to a fixture, including scene/actor/trigger lifecycles, input, movement, camera, dialogue, variables, math, timers, audio, persistence, and script calls. Record expected state and observe it in the debugger. |
 | Playtest and export | Planned | M3 browser playtest, M5 target runtime, M8 export. Launch at a selected scene without moving the saved player start. Export and replay the ROM and web build, including touch controls. |
 | Project reuse and extensions | Planned | M7–M8. Exercise prefab overrides, script parameters, template migration, and an original custom event end to end. |
@@ -77,6 +77,8 @@ Track generated visual blockouts, the repo-backed Codex marketplace, and revisio
 
 The first authoring slice saves terrain paint and erasure, marker and guide placement, and movement profiles. The editor's tile selection and the MCP preview/apply workflow share the same saved scene layer. Keep M3 open until traversal, collision inspection, and Tiled export pass both fixtures.
 
+The placement demo uses an editable room and doorway to establish the scene art layer and reusable asset references ahead of traversal preview. Use that same room for the first top-down preview so the play test can compare the authored blockout with the composed artwork. [Scene artwork layers](docs/decisions/README.md#d14--scene-artwork-layers)
+
 Use “a riverbank with a single bridge, a gate to the east, and room for the Courier” as the fixture. Turn the description into proposed grid dimensions, terrain regions, landmarks, actor footprints, walkable routes, and named entrances. Render a labeled top-down plan with a legend and tile coordinates. Let the creator widen the bridge, move the gate, and regenerate a selected region while preserving edits elsewhere. Replacing placeholder art must preserve trigger IDs, entrances, and collision.
 
 Provide a **Collision** layer with paint, erase, undo, and visibility controls. Start with passable and solid cells plus collidable object footprints. Show blockers with translucent red hatching, outlined footprints, and a text legend. Selecting a blocked cell identifies the terrain or object responsible. Preview movement uses the same occupancy rules as validation. Hiding the overlay changes visibility only. Test a reachable entrance, a blocked bridge, and a moved object that reopens a route. See [the scene-layer decision](docs/decisions/README.md#d03--editable-blockouts-and-collision).
@@ -94,10 +96,17 @@ Start in M3 with the blockout, object and connection editing, and collision insp
 
 ## Tiled compatibility
 
+- [x] **Export an editable scene bundle.** Download a finite orthogonal `.tmj`, referenced `.tsj`, and PNGs from the open scene. Include tile layers, actors, authored blockout, and connection objects with stable IDs where available.
 - [ ] **Export with the first playable blockout (M3).** Export each fixture as a finite orthogonal Tiled JSON map (`.tmj`), with relative references to JSON tilesets (`.tsj`) and PNGs for tile layers, including placeholders where needed. Open both exports in Tiled and verify the grid, editable blockout geometry, named entrances, exits, and collision overrides. Compare the exported coordinates and object identities with the saved scenes.
 - [ ] **Import after export, gated on both fixtures.** Prototype reimport of Cartquilt exports as a reviewed edit against the exported scene revision. Reimport each untouched fixture and verify equivalent geometry, collision, references, and replay. Repaint the river crossing in Tiled and verify the replay reaches the same destination on the same tick. Move the loft's one-way platform one tile and verify its collision footprint moves with it and the jump replay reflects the edit. Check that entrance IDs and actor asset bindings resolve in all cases. Show unsupported content and revision conflicts before applying a change. Release import after these checks pass.
 
 Scope the first import to Cartquilt's documented export subset. Evaluate a real Scene Forge export before expanding support to maps authored elsewhere. Consider a whole-world `.world` export once scene interchange works. See [the Tiled decision](docs/decisions/README.md#d06--tiled-scene-interchange).
+
+## Artwork authoring follow-ups
+
+- [x] **Import reusable art.** Preview and import a PNG tilesheet, a single PNG sprite, or a `gbc-atlas` v1 pack through the Asset library. Verify placements after reopening a project.
+- [ ] **Replace and reimport art.** Preserve stable asset references across revisions and show affected scenes before saving. Use an atlas fixture with relocated regions and an animation that references multiple frames.
+- [ ] **Evaluate native pixel touch-ups and agent-assisted generation.** Use the doorway room and loft scenes to identify frequent edits that benefit from an in-editor tool. Prototype a palette-aware pixel or palette edit and an agent-proposed tile set. Both should preview in context and use the same asset validation, replacement, and revision checks. Expand the drawing workflow when those trials show creators benefit from staying in Cartquilt.
 
 ## Workflow coverage for the later milestones
 

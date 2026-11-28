@@ -47,7 +47,7 @@ func New(initial *project.Saved, web fs.FS) http.Handler {
 		if resolved, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
 			path = filepath.Join(resolved, filepath.Base(path))
 		}
-		entry := sessionProject{path: path, handler: projectRoutes(saved.Path, editorFiles)}
+		entry := sessionProject{path: path, handler: projectRoutes(saved.Path, editorFiles, web)}
 		base := projectSlug(saved.Project.Name)
 		slug := base
 		for suffix := 2; ; suffix++ {
@@ -82,8 +82,10 @@ func New(initial *project.Saved, web fs.FS) http.Handler {
 	}
 	mux.HandleFunc("GET /projects/{slug}/", serveOpenedProject)
 	mux.HandleFunc("POST /projects/{slug}/api/project/scenes", serveOpenedProject)
+	mux.HandleFunc("POST /projects/{slug}/api/artwork-assets/import", serveOpenedProject)
 	mux.HandleFunc("POST /projects/{slug}/api/project/scenes/{scene}/actions", serveOpenedProject)
 	mux.HandleFunc("PUT /projects/{slug}/api/project/scenes/{scene}/blockout", serveOpenedProject)
+	mux.HandleFunc("PUT /projects/{slug}/api/project/scenes/{scene}/artwork", serveOpenedProject)
 	mux.HandleFunc("POST /api/projects", func(w http.ResponseWriter, r *http.Request) {
 		var input project.CreateInput
 		if !decodeLocalRequest(w, r, &input) {
@@ -130,7 +132,7 @@ func New(initial *project.Saved, web fs.FS) http.Handler {
 		})
 		mux.Handle("GET /", editorFiles)
 	} else {
-		mux.Handle("/", projectRoutes(initial.Path, editorFiles))
+		mux.Handle("/", projectRoutes(initial.Path, editorFiles, web))
 	}
 	return mux
 }
@@ -140,16 +142,7 @@ func decodeLocalRequest(w http.ResponseWriter, r *http.Request, input any) bool 
 }
 
 func decodeLocalRequestWithLimit(w http.ResponseWriter, r *http.Request, input any, limit int64) bool {
-	host, _, err := net.SplitHostPort(r.Host)
-	if err != nil {
-		host = r.Host
-	}
-	if !strings.EqualFold(host, "localhost") && !net.ParseIP(host).IsLoopback() {
-		http.Error(w, "Project requests require a loopback address", http.StatusForbidden)
-		return false
-	}
-	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host {
-		http.Error(w, "Project requests require the editor origin", http.StatusForbidden)
+	if !requireLocalEditor(w, r) {
 		return false
 	}
 	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
@@ -161,6 +154,22 @@ func decodeLocalRequestWithLimit(w http.ResponseWriter, r *http.Request, input a
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(input); err != nil || decoder.Decode(new(any)) != io.EOF {
 		http.Error(w, "Invalid project request", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+func requireLocalEditor(w http.ResponseWriter, r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		host = r.Host
+	}
+	if !strings.EqualFold(host, "localhost") && !net.ParseIP(host).IsLoopback() {
+		http.Error(w, "Project requests require a loopback address", http.StatusForbidden)
+		return false
+	}
+	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host {
+		http.Error(w, "Project requests require the editor origin", http.StatusForbidden)
 		return false
 	}
 	return true

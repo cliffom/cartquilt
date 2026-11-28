@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"cartquilt/internal/editor"
@@ -22,6 +24,16 @@ const (
 	defaultHTTPPort   = 4173
 	readHeaderTimeout = 5 * time.Second
 )
+
+type editorFiles struct{ fs.FS }
+
+func (files editorFiles) Open(name string) (fs.File, error) {
+	file, err := files.FS.Open(name)
+	if os.IsNotExist(err) && strings.HasPrefix(name, "starter/") {
+		return os.DirFS("web/static").Open(name)
+	}
+	return file, err
+}
 
 func main() {
 	path := flag.String("project", os.Getenv("CARTQUILT_PROJECT"), "saved project file to open at startup")
@@ -51,6 +63,6 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("Cartquilt at http://%s", listener.Addr())
-	server := http.Server{Handler: editor.New(initial, os.DirFS("web/dist")), ReadHeaderTimeout: readHeaderTimeout}
+	server := http.Server{Handler: editor.New(initial, editorFiles{os.DirFS("web/dist")}), ReadHeaderTimeout: readHeaderTimeout}
 	log.Fatal(server.Serve(listener))
 }

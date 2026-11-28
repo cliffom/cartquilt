@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { expect, openExample, test } from "./fixtures.mjs";
 
 const exampleGrid = { columns: 20, rows: 14 };
@@ -394,4 +396,410 @@ test("zooms and fits the scene while keeping blockout strokes aligned", async ({
   await expect(percentage).toHaveText("120%");
   await canvas.press("f");
   await expect(percentage).toHaveText("100%");
+});
+
+test("paints a layered room, places the Courier, and reopens the saved artwork", async ({
+  page,
+  workspace,
+}) => {
+  await openExample(page, workspace);
+  const projectTiles = join(workspace.folder, "threadvale", "assets", "tiles");
+  await mkdir(projectTiles, { recursive: true });
+  await cp(
+    new URL("../../web/static/starter/rug.png", import.meta.url),
+    join(projectTiles, "Quilt-square.png"),
+  );
+  await page.getByRole("button", { name: "New scene" }).click();
+  const dialog = page.getByRole("dialog", { name: "New scene" });
+  await dialog.getByLabel("Scene name").fill("Doorway Room");
+  await dialog.getByLabel("Height in tiles").fill(String(exampleGrid.rows));
+  await dialog.getByRole("button", { name: "Create scene" }).click();
+  const card = page
+    .getByLabel("World map canvas")
+    .getByRole("button", { name: "Doorway Room", exact: true });
+  await card.dblclick();
+  const canvas = page.getByLabel("Doorway Room scene canvas");
+  const artwork = page.getByRole("button", { name: "Artwork", exact: true });
+  const tools = page.getByRole("region", { name: "Artwork tools" });
+  const layers = tools.getByRole("combobox", { name: "Tile layer", exact: true });
+  const library = page.getByRole("dialog", { name: "Asset library" });
+  async function selectAsset(name, kind = "tile") {
+    await tools.getByRole("button", { name: "Choose asset" }).click();
+    await library.getByLabel("Asset type").selectOption(kind);
+    await library.getByRole("searchbox", { name: "Search assets" }).fill(name);
+    await library.getByRole("button", { name, exact: true }).click();
+    await library
+      .getByRole("button", { name: kind === "tile" ? "Use tile" : "Use sprite" })
+      .click();
+  }
+  const clickTile = async (x, y) => page.mouse.click(...(await tileCenter(canvas, x, y)));
+  const dragTiles = async (x, y, endX, endY) => {
+    await page.mouse.move(...(await tileCenter(canvas, x, y)));
+    await page.mouse.down();
+    await page.mouse.move(...(await tileCenter(canvas, endX, endY)), { steps: 4 });
+    await page.mouse.up();
+  };
+  const addLayer = async (name) => {
+    await tools.getByLabel("New tile layer name").fill(name);
+    await tools.getByRole("button", { name: "Add layer" }).click();
+    await expect(layers.locator("option:checked")).toHaveText(name);
+  };
+
+  await page.getByRole("button", { name: "Blockout", exact: true }).click();
+  await page.getByLabel("Brush").selectOption("blocked");
+  await clickTile(4, 3);
+  const blocked = canvas.locator('[data-terrain="blocked"]');
+  await expect(blocked).toHaveCount(1);
+
+  await artwork.click();
+  await addLayer("Room");
+  const chooseAsset = tools.getByRole("button", { name: "Choose asset", exact: true });
+  const chooseTooltip = tools.locator("#choose-artwork-asset-label");
+  await expect(chooseAsset.locator("use")).toHaveAttribute("href", "#icon-library");
+  await expect(chooseTooltip).toBeHidden();
+  await chooseAsset.hover();
+  await expect(chooseTooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(chooseTooltip).toBeHidden();
+  await page.mouse.move(0, 0);
+  await chooseAsset.press("Tab");
+  const selectMove = tools.getByRole("button", { name: "Select & move", exact: true });
+  await expect(selectMove).toBeFocused();
+  await expect(selectMove).toHaveAttribute("aria-pressed", "true");
+  await expect(tools.locator("#select-artwork-label")).toBeVisible();
+  await selectAsset("Floor");
+  await expect(chooseAsset).toHaveAttribute("data-active", "");
+  await expect(canvas.locator(".art")).toHaveCSS("cursor", "crosshair");
+  await dragTiles(4, 3, 10, 8);
+  await expect(canvas.locator('[data-tile="floor"]')).toHaveCount(1);
+  await selectAsset("Wall");
+  await dragTiles(4, 3, 10, 3);
+  await expect(canvas.locator('[data-tile="wall"]')).toHaveCount(1);
+  await selectAsset("Doorway");
+  await clickTile(7, 3);
+  await expect(canvas.locator('[data-tile="doorway"]')).toHaveCount(1);
+  await expect(canvas.locator('[data-tile="wall"]')).toHaveCount(2);
+
+  await addLayer("Decor");
+  await selectAsset("Quilt square");
+  await clickTile(6, 5);
+  await clickTile(7, 5);
+  const rug = canvas.locator('[data-tile="tile:Quilt-square.png"]');
+  await expect(rug).toHaveCount(2);
+  const eraseTile = tools.getByRole("button", { name: "Erase tile" });
+  await eraseTile.click();
+  await expect(eraseTile).toHaveAttribute("aria-pressed", "true");
+  await expect(canvas.locator(".art")).toHaveCSS("cursor", /eraser-cursor\.svg.*crosshair/);
+  expect((await page.request.get(new URL("/eraser-cursor.svg", page.url()).href)).ok()).toBe(true);
+  await clickTile(6, 5);
+  await expect(rug).toHaveCount(1);
+  await tools.getByRole("button", { name: "Move layer down" }).click();
+  await expect(layers.locator("option").first()).toHaveText("Room");
+  const hideLayer = tools.getByRole("button", { name: "Hide layer", exact: true });
+  await expect(hideLayer.locator("use")).toHaveAttribute("href", "#icon-eye");
+  await hideLayer.click();
+  await expect(rug).toHaveCount(0);
+  const showLayer = tools.getByRole("button", { name: "Show layer", exact: true });
+  await expect(showLayer.locator("use")).toHaveAttribute("href", "#icon-eye-off");
+  await expect(showLayer).toHaveAttribute("data-layer-hidden", "");
+  expect(await showLayer.locator("use").evaluate((icon) => icon.getBBox().width)).toBeGreaterThan(
+    0,
+  );
+
+  await selectAsset("Courier", "sprite");
+  await clickTile(exampleGrid.columns - 1, exampleGrid.rows - 1);
+  await expect(page.locator("#artwork-error")).toContainText("needs room for its full image");
+  await expect(chooseAsset).toHaveAttribute("data-active", "");
+  await page.getByRole("button", { name: "Dismiss artwork save warning" }).click();
+  await clickTile(8, 6);
+  const courier = canvas.getByRole("button", { name: "Courier", exact: true });
+  await expect(courier).toHaveCSS("left", /px$/);
+  const undoArt = page.getByRole("button", { name: "Undo", exact: true });
+  const redoArt = page.getByRole("button", { name: "Redo", exact: true });
+  const actorID = await courier.getAttribute("data-actor-id");
+  await undoArt.click();
+  await expect(courier).toHaveCount(0);
+  await redoArt.click();
+  await expect(courier).toHaveAttribute("data-actor-id", actorID);
+  await expect(courier.locator("img")).toHaveJSProperty("naturalWidth", 12);
+  await tools.getByLabel("Show artwork").uncheck();
+  await expect(canvas.locator(".artwork-tiles")).toHaveCount(0);
+  await expect(courier).toHaveCount(0);
+  await expect(blocked).toBeVisible();
+
+  await page.reload();
+  await card.dblclick();
+  await expect(canvas.locator('[data-tile="doorway"]')).toBeVisible();
+  await expect(courier).toHaveAttribute("style", /left: 40%;/);
+  await expect(courier.locator("img")).toHaveJSProperty("naturalWidth", 12);
+  await expect(rug).toHaveCount(0);
+  await artwork.click();
+  await expect(layers.locator("option")).toHaveText(["Room", "Decor"]);
+  await layers.selectOption({ label: "Decor" });
+  await showLayer.click();
+  await expect(hideLayer.locator("use")).toHaveAttribute("href", "#icon-eye");
+  await expect(rug).toBeVisible();
+
+  await courier.click();
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+  await inspector.getByRole("spinbutton", { name: "X", exact: true }).fill("72");
+  await inspector.getByRole("button", { name: "Save position" }).click();
+  await expect(page.locator("#status")).toHaveText("No unsaved scene edits");
+  const manifestPath = join(workspace.folder, "threadvale", "project.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const savedRoom = manifest.scenes.find((scene) => scene.name === "Doorway Room");
+  const actorMetadata = { notes: "x".repeat(40 * 1024) };
+  savedRoom.actors[0].custom = actorMetadata;
+  const largeInteger = "9007199254740993";
+  savedRoom.actors[0].customOrdinal = largeInteger;
+  await writeFile(
+    manifestPath,
+    JSON.stringify(manifest).replace(`"${largeInteger}"`, largeInteger),
+  );
+  await page.reload();
+  await card.dblclick();
+  await expect(courier).toHaveAttribute("style", /left: 45%;/);
+  await courier.click();
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await inspector.getByRole("button", { name: "Remove actor" }).click();
+  await expect(courier).toHaveCount(1);
+  page.once("dialog", (dialog) => dialog.accept());
+  await inspector.getByRole("button", { name: "Remove actor" }).click();
+  await expect(courier).toHaveCount(0);
+  await undoArt.click();
+  await expect(courier).toHaveAttribute("data-actor-id", actorID);
+  await expect(courier).toHaveAttribute("style", /left: 45%;/);
+  const restored = await readFile(manifestPath, "utf8");
+  const restoredRoom = JSON.parse(restored).scenes.find((scene) => scene.id === savedRoom.id);
+  expect(restoredRoom.actors[0].custom).toEqual(actorMetadata);
+  expect(restored).toMatch(/"customOrdinal":\s*9007199254740993/);
+  await redoArt.click();
+  await expect(courier).toHaveCount(0);
+  await page.reload();
+  await card.dblclick();
+  await expect(courier).toHaveCount(0);
+});
+
+test("imports PNGs and atlas packs through the library and downloads a Tiled scene", async ({
+  page,
+  workspace,
+}) => {
+  await openExample(page, workspace);
+  const world = page.getByLabel("World map canvas");
+  const library = page.getByRole("dialog", { name: "Asset library" });
+  const desktop = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.locator("#project-menu summary").click();
+  await page.getByRole("button", { name: "Asset library", exact: true }).click();
+  await library.getByRole("button", { name: "Floor", exact: true }).click();
+  await expect(library.getByRole("button", { name: "Use tile", includeHidden: true })).toBeHidden();
+  await library.getByRole("button", { name: "Import assets" }).click();
+  await expect(library.getByLabel("Import format")).toBeFocused();
+  expect(await library.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+    true,
+  );
+  await page.keyboard.press("Escape");
+  if (desktop) await page.setViewportSize(desktop);
+  const card = world.getByRole("button", { name: "Loom Yard", exact: true });
+  await card.dblclick();
+  const canvas = page.getByLabel("Loom Yard scene canvas");
+  await page.getByRole("button", { name: "Artwork", exact: true }).click();
+  const tools = page.getByRole("region", { name: "Artwork tools" });
+  await tools.getByLabel("New tile layer name").fill("Imported floor");
+  await tools.getByRole("button", { name: "Add layer" }).click();
+  await expect(tools.getByRole("combobox", { name: "Tile layer" })).toBeEnabled();
+
+  const png = fileURLToPath(new URL("../fixtures/atlas/room.png", import.meta.url));
+  const manifest = fileURLToPath(new URL("../fixtures/atlas/room.atlas.json", import.meta.url));
+  async function importDialog(format) {
+    await tools.getByRole("button", { name: "Choose asset" }).click();
+    await library.getByRole("button", { name: "Import assets" }).click();
+    await library.getByLabel("Import format").selectOption(format);
+  }
+  await importDialog("tiles");
+  await expect(library.getByLabel("Atlas manifest")).toBeHidden();
+  await library.getByLabel("PNG image").setInputFiles(png);
+  await expect(library.getByAltText("Selected PNG preview")).toHaveJSProperty("naturalWidth", 16);
+  await library.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(library.getByRole("status").filter({ hasText: "of 4 imported" })).toBeVisible();
+  await library.getByRole("button", { name: "room (1, 1)", exact: true }).click();
+  await library.getByRole("button", { name: "Use tile" }).click();
+  await page.mouse.click(...(await tileCenter(canvas, 3, 4)));
+  await expect(canvas.locator('[data-tile^="tile:asset-"]')).toHaveCount(1);
+
+  await importDialog("gbc-atlas");
+  await expect(library.getByLabel("Atlas manifest")).toBeVisible();
+  await library
+    .getByLabel("PNG image")
+    .setInputFiles({ name: "wrong.png", mimeType: "image/png", buffer: await readFile(png) });
+  await library.getByLabel("Atlas manifest").setInputFiles(manifest);
+  await library.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(library.getByRole("alert")).toHaveText(
+    "the PNG filename must match the atlas manifest",
+  );
+  await library.getByLabel("PNG image").setInputFiles(png);
+  await library.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(library.getByRole("status").filter({ hasText: "of 2 imported" })).toBeVisible();
+  await library.getByLabel("Asset type").selectOption("sprite");
+  await library.getByRole("button", { name: "courier frame", exact: true }).click();
+  await library.getByRole("button", { name: "Use sprite" }).click();
+  await page.mouse.click(...(await tileCenter(canvas, 6, 5)));
+  const actor = canvas.getByRole("button", { name: "courier frame", exact: true });
+  await expect(actor.locator("img")).toHaveJSProperty("naturalHeight", 16);
+
+  await page.reload();
+  await card.dblclick();
+  await expect(actor.locator("img")).toHaveJSProperty("naturalWidth", 8);
+  const download = page.waitForEvent("download");
+  await page.locator("#project-menu summary").click();
+  await page.getByRole("button", { name: "Export scene to Tiled" }).click();
+  const bundle = await download;
+  expect(bundle.suggestedFilename()).toBe("loom-yard-tiled.zip");
+  expect((await readFile(await bundle.path())).subarray(0, 2).toString()).toBe("PK");
+});
+
+test("selects, drags, and nudges placed artwork without changing nearby tiles", async ({
+  page,
+  workspace,
+}) => {
+  await openExample(page, workspace);
+  const card = page
+    .getByLabel("World map canvas")
+    .getByRole("button", { name: "Willow Bank", exact: true });
+  await card.dblclick();
+  const canvas = page.getByLabel("Willow Bank scene canvas");
+  const sprite = canvas.getByRole("button", { name: "Courier", exact: true });
+  await expect(sprite).toHaveCSS("cursor", "move");
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+  const undo = page.getByRole("button", { name: "Undo", exact: true });
+  const redo = page.getByRole("button", { name: "Redo", exact: true });
+  const art = await canvas.locator(".art").boundingBox();
+  const spriteBounds = await sprite.boundingBox();
+  if (!art || !spriteBounds) throw Error("Expected the actor and scene canvas to be visible");
+  const center = [
+    spriteBounds.x + spriteBounds.width / 2,
+    spriteBounds.y + spriteBounds.height / 2,
+  ];
+  await page.mouse.move(...center);
+  await page.mouse.down();
+  await page.mouse.move(center[0] + art.width / 9, center[1] + art.height / 13, { steps: 4 });
+  await expect(canvas.locator(".artwork-move-preview")).toBeVisible();
+  await expect(canvas).toHaveCSS("cursor", "grabbing");
+  const footprint = canvas.locator(".artwork-move-footprint");
+  // The 12 × 16 pixel Courier covers two columns and two rows.
+  await expect(footprint).toHaveAttribute("style", /left: 55%;.*width: 10%; height: 14\.2857%;/);
+  await expect(footprint).toHaveCSS("background-size", "50% 50%, 50% 50%");
+  await page.mouse.up();
+  await expect(footprint).toHaveCount(0);
+  const spriteX = inspector.getByRole("spinbutton", { name: "X", exact: true });
+  const spriteY = inspector.getByRole("spinbutton", { name: "Y", exact: true });
+  await expect(spriteX).toHaveValue("88");
+  await expect(spriteY).toHaveValue("72");
+  await undo.click();
+  await expect(spriteX).toHaveValue("73");
+  await expect(spriteY).toHaveValue("66");
+  await expect(undo).toBeDisabled();
+  await redo.click();
+  await expect(spriteX).toHaveValue("88");
+  await expect(spriteY).toHaveValue("72");
+  await expect(page.locator("#status")).toHaveText("No unsaved scene edits");
+  await spriteX.fill("97");
+  await inspector.getByRole("button", { name: "Save position" }).click();
+  await expect(page.locator("#status")).toHaveText("No unsaved scene edits");
+  await undo.click();
+  await expect(spriteX).toHaveValue("88");
+  await undo.click();
+  await expect(spriteX).toHaveValue("73");
+  await redo.click();
+  await expect(spriteX).toHaveValue("88");
+  await expect(page.locator("#status")).toHaveText("No unsaved scene edits");
+  await canvas.press("ArrowRight");
+  await expect(spriteX).toHaveValue("96");
+  await expect(page.locator("#status")).toHaveText("No unsaved scene edits");
+
+  await page.getByRole("button", { name: "Artwork", exact: true }).click();
+  const tools = page.getByRole("region", { name: "Artwork tools" });
+  await tools.getByLabel("New tile layer name").fill("Movable art");
+  await tools.getByRole("button", { name: "Add layer" }).click();
+  await expect(tools.getByRole("combobox", { name: "Tile layer" })).toBeEnabled();
+  await tools.getByRole("button", { name: "Choose asset" }).click();
+  const library = page.getByRole("dialog", { name: "Asset library" });
+  await library.getByRole("button", { name: "Floor", exact: true }).click();
+  await library.getByRole("button", { name: "Use tile" }).click();
+  await page.mouse.move(...(await tileCenter(canvas, 2, 3)));
+  await page.mouse.down();
+  await page.mouse.move(...(await tileCenter(canvas, 3, 4)), { steps: 4 });
+  await page.mouse.up();
+  await page.mouse.click(...(await tileCenter(canvas, 7, 3)));
+  const floor = canvas.locator('[data-tile="floor"]');
+  await expect(floor).toHaveCount(2);
+  // Painting the same tile inside the first region leaves it intact and adds no undo step.
+  await page.mouse.click(...(await tileCenter(canvas, 3, 4)));
+  await expect(undo).toBeEnabled();
+  await expect(floor).toHaveCount(2);
+  const restoreRoute = "**/api/project/scenes/*/artwork";
+  await page.route(restoreRoute, (route) =>
+    route.fulfill({ status: 409, body: "Temporary save conflict." }),
+  );
+  await undo.click();
+  await expect(page.locator("#artwork-error")).toContainText("Temporary save conflict.");
+  await expect(floor).toHaveCount(2);
+  await expect(undo).toBeEnabled();
+  await page.unroute(restoreRoute);
+  await page.getByRole("button", { name: "Dismiss artwork save warning" }).click();
+  await undo.click();
+  await expect(floor).toHaveCount(1);
+  await expect(sprite).toHaveAttribute("style", /left: 60%;/);
+  await undo.click();
+  await expect(floor).toHaveCount(0);
+  await expect(sprite).toHaveAttribute("style", /left: 60%;/);
+  await redo.click();
+  await expect(floor).toHaveCount(1);
+  await redo.click();
+  await expect(floor).toHaveCount(2);
+  await tools.getByRole("button", { name: "Erase tile" }).click();
+  await page.mouse.click(...(await tileCenter(canvas, 2, 3)));
+  await expect(floor).toHaveCount(3);
+  await undo.click();
+  await expect(floor).toHaveCount(2);
+  await expect(floor.first()).toHaveAttribute("style", /left: 10%;.*width: 10%;/);
+  await tools.getByRole("button", { name: "Select & move" }).click();
+  await expect(floor.first()).toHaveCSS("cursor", "move");
+
+  async function dragTile(from, to, blocked = false) {
+    await page.mouse.move(...(await tileCenter(canvas, from, 3)));
+    await page.mouse.down();
+    await page.mouse.move(...(await tileCenter(canvas, to, 3)), { steps: 4 });
+    await expect(footprint).toHaveAttribute("style", new RegExp(`left: ${to * 5}%;.*width: 10%;`));
+    await expect(footprint).toHaveCSS("background-size", "50% 50%, 50% 50%");
+    if (blocked) await expect(footprint).toHaveClass(/\bblocked\b/);
+    await page.mouse.up();
+  }
+  await dragTile(2, 4);
+  await expect(floor.first()).toHaveAttribute("style", /left: 20%;/);
+  await expect(canvas.locator(".artwork-selection")).toHaveAttribute("style", /left: 20%;/);
+  await dragTile(4, 7, true);
+  await expect(page.locator("#artwork-feedback")).toContainText("overlaps another tile region");
+  await expect(floor.first()).toHaveAttribute("style", /left: 20%;/);
+  await undo.click();
+  await expect(floor.first()).toHaveAttribute("style", /left: 10%;/);
+  await expect(canvas.locator(".artwork-selection")).toHaveAttribute("style", /left: 10%;/);
+  await redo.click();
+  await expect(floor.first()).toHaveAttribute("style", /left: 20%;/);
+
+  await tools.getByText("Coordinates", { exact: true }).click();
+  await tools.getByLabel("Tile X", { exact: true }).fill("4");
+  await tools.getByLabel("Tile Y", { exact: true }).fill("3");
+  await tools.getByRole("button", { name: "Select at coordinates", exact: true }).click();
+  await expect(canvas).toBeFocused();
+  await canvas.press("ArrowRight");
+  await expect(floor.first()).toHaveAttribute("style", /left: 25%;/);
+  await expect(floor.last()).toHaveAttribute("style", /left: 35%;/);
+  await expect(page.locator("#status")).toHaveText("No unsaved scene edits");
+  await undo.click();
+  await expect(floor.first()).toHaveAttribute("style", /left: 20%;/);
+  await page.reload();
+  await card.dblclick();
+  await expect(sprite).toHaveAttribute("style", /left: 60%;/);
+  await expect(floor.first()).toHaveAttribute("style", /left: 20%;/);
 });

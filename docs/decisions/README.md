@@ -40,6 +40,8 @@ Prototype one river crossing with a collidable crate. Test moving the crate, cha
 
 **Proposed implementation.** Use finite orthogonal maps with tile layers for appearance and editable objects or layers for blockout geometry, entrances, exits, and authored collision overrides. Carry stable Cartquilt IDs in custom properties and retain the source scene revision for reimport. Derive effective collision from imported geometry and authored overrides through the same validation path used by native edits. Document the supported mappings before shipping export.
 
+**Implemented export subset.** Export the saved scene as a ZIP with a `.tmj`, an external image-collection `.tsj` when artwork needs it, and relative PNG dependencies. Export the backdrop as an image layer, actors as tile objects, and blockout and connections as object layers. Store Cartquilt IDs, movement profile, destination references, and source revision as custom properties. Native project saves remain authoritative for the catalog, world graph, and revision checks.
+
 Bring supported reimport changes through the proposal and revision checks in D02. Verify reimport without edits, an art-only edit, and a geometry edit across the top-down and platformer fixtures before releasing import. Use the [roadmap checks](../../ROADMAP.md#tiled-compatibility) to verify replay timing, collision, and reference integrity. Expand the format subset when representative external maps establish what creators need.
 
 ### D07 · Create an empty local project
@@ -83,6 +85,18 @@ The editor and world map previews share tile hover, rectangle selection, and the
 **Accepted · Architecture · 2026-11-27 · M3.** Store optional scene blockouts as non-overlapping terrain rectangles and independently placed, scene-scoped markers and guides. Unpainted tiles carry no terrain assignment. A brush replaces or erases the intersecting terrain portion and preserves geometry outside the brush. This lets creators paint over an existing plan while keeping points such as a spawn or checkpoint and guides such as a patrol range or camera frame. Stage exit markers carry planning intent. Scene connections continue to own the linked exits.
 
 The browser and MCP apply the same ordered edit batch through the project revision and atomic write path. MCP can validate and inspect a candidate without saving. The movement profile records design intent for the runtime and Tiled mapping work. Terrain visibility stays an editor setting. Browser history includes actor drafts and blockout changes. Restoring a blockout checks the current project revision and updates only the saved blockout layer.
+
+### D14 · Scene artwork layers
+
+**Accepted · Architecture · M3/M6.** Save scene tile layers in bottom-to-top order with stable IDs, names, and visibility. Each layer stores non-overlapping rectangles referencing reusable 8×8 tiles. A brush replaces the selected layer inside its rectangle. The player spawn, terrain, and scene connections keep their own saved geometry.
+
+The asset library lists bundled artwork and standalone PNGs in project-local `assets/tiles/` and `assets/sprites/` folders. A loose PNG reference incorporates its kind and filename. Each sprite placement creates a scene actor with its own ID, dimensions, and pixel position. The scene editor saves actor placements, position updates, removals, and layer changes through revision-checked scene writes. **Show artwork** hides the visual layers and actor sprites to reveal the blockout.
+
+**Accepted · Architecture · M6.** PNG tilesheets, PNG sprites, and `gbc-atlas` v1 packs enter the same project-owned catalog. Imports copy the source and display images into content-addressed project storage and assign stable IDs to the placeable assets. Atlas imports retain the source manifest, validate cell palettes and sprite pairs, and expose tile cells and named sprite regions for placement. Animation editing and explicit replacement build on the retained metadata and IDs.
+
+**Accepted · Interaction design · M6.** Make the library reachable from the project menu before a scene exists, and from Artwork when placing assets. Browse by type or name, preview a selection at pixel scale, then choose to use it. The import view shows format-specific file fields and validates uploads in place. Successful imports return to the library with the new assets visible.
+
+Artwork and blockout edits share the scene's undo order. Reserve history entries when the editor submits a gesture and retain them after the save succeeds. Tile painting, erasing, and layer changes restore the previous layer data through a revision-checked service operation. Undoing sprite removal restores its original ID, metadata, and draw order.
 
 ### Decisions due before dependent work
 

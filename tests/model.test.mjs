@@ -19,6 +19,22 @@ try {
   rmSync(temp, { recursive: true, force: true });
 }
 
+test("queued artwork edits retain their submission order and failures leave history intact", () => {
+  const doc = new SceneDocument(decode(response).project.scenes[0]);
+  const first = doc.beginArtworkEdit();
+  const second = doc.beginArtworkEdit();
+  const failed = doc.beginArtworkEdit();
+  const move = { op: "move-actor", actorId: "courier", position: { x: 73, y: 66 } };
+  const paint = { op: "restore-layers", layers: [] };
+  first(move);
+  second(paint);
+  failed();
+  assert.deepEqual(doc.artworkHistory("undo"), paint);
+  doc.acceptArtworkHistory("undo", paint);
+  assert.deepEqual(doc.artworkHistory("undo"), move);
+  assert.deepEqual(doc.artworkHistory("redo"), paint);
+});
+
 test("service snapshot decodes with stable scene and actor IDs", () => {
   const snapshot = decode(response);
   assert.deepEqual(
@@ -370,4 +386,53 @@ test("the 51st blockout edit trims the oldest blockout step and preserves actor 
   }
   assert.equal(doc.scene.blockout.elements[0].x, (committedEdits - 1) % doc.scene.width);
   assert.equal(doc.canRedo, false);
+});
+
+test("accepting a saved Courier placement keeps an existing actor draft and history", () => {
+  const w = new Workspace(decode(response));
+  const doc = w.active;
+  const original = doc.scene.actors[0];
+  doc.apply({ type: "moveActor", actor: original.id, axis: "x", value: original.x + 1 });
+
+  const updated = structuredClone(response);
+  const placed = {
+    id: "actor-placed",
+    name: "Courier",
+    sprite: "starter:courier",
+    x: 16,
+    y: 16,
+    width: 12,
+    height: 16,
+  };
+  updated.project.scenes[0].actors.push(placed);
+  w.acceptSceneAction(decode(updated), doc.scene.id, "artwork", {
+    op: "place-sprite",
+    sprite: placed.sprite,
+  });
+  assert.equal(doc.dirty, true);
+  assert.equal(doc.scene.actors[0].x, original.x + 1);
+  doc.undo();
+  assert.deepEqual(doc.scene.actors, [original, placed]);
+  assert.equal(doc.dirty, false);
+  doc.redo();
+  assert.deepEqual(doc.scene.actors, [{ ...original, x: original.x + 1 }, placed]);
+
+  doc.apply({ type: "moveActor", actor: placed.id, axis: "x", value: 24 });
+  const remove = { op: "remove-actor", actorId: placed.id };
+  const finish = doc.beginArtworkEdit();
+  const inverse = doc.captureArtworkInverse(remove);
+  updated.project.scenes[0].actors.pop();
+  w.acceptSceneAction(decode(updated), doc.scene.id, "artwork", remove);
+  finish(inverse(JSON.stringify(placed)));
+  assert.deepEqual(doc.scene.actors, [{ ...original, x: original.x + 1 }]);
+  const restore = doc.artworkHistory("undo");
+  updated.project.scenes[0].actors.push(placed);
+  w.acceptSceneAction(decode(updated), doc.scene.id, "artwork", restore);
+  doc.acceptArtworkHistory("undo", remove);
+  assert.equal(doc.scene.actors[1].x, 24);
+  doc.undo();
+  assert.deepEqual(doc.scene.actors, [{ ...original, x: original.x + 1 }, placed]);
+  doc.undo();
+  assert.deepEqual(doc.scene.actors, [original, placed]);
+  assert.equal(doc.dirty, false);
 });

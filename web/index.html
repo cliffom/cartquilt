@@ -7,6 +7,44 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/cartquilt-32.png" />
   </head>
   <body>
+    <svg class="visually-hidden" aria-hidden="true" focusable="false">
+      <symbol id="icon-library" viewBox="0 0 20 20">
+        <path d="M2.5 12V4a1.5 1.5 0 0 1 1.5-1.5h10M6 13.5l3-3 2.5 2.5 2-2 4 4" />
+        <rect x="6" y="6" width="11.5" height="11.5" rx="1.5" />
+        <circle cx="13.5" cy="9" r=".8" fill="currentColor" stroke="none" />
+      </symbol>
+      <symbol id="icon-move" viewBox="0 0 20 20">
+        <path d="M10 2v16M2 10h16M7 5l3-3 3 3m-6 10 3 3 3-3M5 7l-3 3 3 3m10-6 3 3-3 3" />
+      </symbol>
+      <symbol id="icon-eraser" viewBox="0 0 20 20">
+        <path d="m3 11 7.5-7.5a1.5 1.5 0 0 1 2.1 0L17 7.9a1.5 1.5 0 0 1 0 2.1l-6.5 6.5h-4L3 13.1a1.5 1.5 0 0 1 0-2.1ZM7 7l7 7m-3.5 2.5H18" />
+      </symbol>
+      <symbol id="icon-eye" viewBox="0 0 20 20">
+        <path d="M2 10s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5Z" />
+        <circle cx="10" cy="10" r="2" />
+      </symbol>
+      <symbol id="icon-eye-off" viewBox="0 0 20 20">
+        <path d="M2.5 2.5l15 15M7.4 5.4A8 8 0 0 1 10 5c5 0 8 5 8 5a14 14 0 0 1-2.2 2.6m-2.9 2A8 8 0 0 1 10 15c-5 0-8-5-8-5a14 14 0 0 1 2.5-2.8" />
+      </symbol>
+      <symbol id="icon-trash" viewBox="0 0 20 20">
+        <path d="M3 5h14M7 5V3h6v2M5 5l.8 11.5h8.4L15 5M8.5 8.5v5m3-5v5" />
+      </symbol>
+      <symbol id="icon-arrow-up" viewBox="0 0 20 20">
+        <path d="M10 17V3m-5 5 5-5 5 5" />
+      </symbol>
+      <symbol id="icon-arrow-down" viewBox="0 0 20 20">
+        <path d="M10 3v14m-5-5 5 5 5-5" />
+      </symbol>
+      <symbol id="icon-fit" viewBox="0 0 20 20">
+        <path d="M7 2.5H2.5V7m10.5-4.5h4.5V7m0 6v4.5H13m-6 0H2.5V13M7 7h6v6H7z" />
+      </symbol>
+      <symbol id="icon-undo" viewBox="0 0 20 20">
+        <path d="m7 4-4 4 4 4M3 8h9a4 4 0 0 1 0 8h-2" />
+      </symbol>
+      <symbol id="icon-redo" viewBox="0 0 20 20">
+        <path d="m13 4 4 4-4 4m4-4H8a4 4 0 0 0 0 8h2" />
+      </symbol>
+    </svg>
     <header>
       <img src="/cartquilt-64.png" srcset="/cartquilt-64.png 64w, /cartquilt-256.png 256w" sizes="48px" width="48" height="48" alt="" /><strong>Cartquilt</strong
       ><span class="slash" id="project-divider" hidden>/</span><span id="project" hidden></span>
@@ -22,6 +60,8 @@
           <div class="project-menu-panel">
             <button id="new-project" type="button">New project</button>
             <button id="open-project" type="button">Open project</button>
+            <button id="open-project-assets" type="button" aria-haspopup="dialog">Asset library</button>
+            <button id="export-scene-tiled" type="button" hidden>Export scene to Tiled</button>
             <button id="close-project" type="button">Close project</button>
           </div>
         </details>
@@ -184,7 +224,7 @@
             <span id="percentage">100%</span>
             <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
             <button id="fit-view" class="scene-icon-button" type="button" aria-label="Fit view" title="Fit view">
-              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 2.5H2.5V7m10.5-4.5h4.5V7m0 6v4.5H13m-6 0H2.5V13M7 7h6v6H7z" /></svg>
+              <svg class="icon" aria-hidden="true"><use href="#icon-fit" /></svg>
             </button>
           </div>
           <div id="scene-toolbar" class="scene-toolbar" role="group" aria-label="Scene tools" hidden>
@@ -192,13 +232,14 @@
               <button id="place-entrance" type="button" aria-pressed="false"><span aria-hidden="true">+</span> Entrance</button>
               <button id="place-exit" type="button" aria-pressed="false"><span aria-hidden="true">+</span> Exit</button>
               <button id="toggle-blockout" type="button" aria-expanded="false" aria-controls="blockout-tools">Blockout</button>
+              <button id="toggle-artwork" type="button" aria-expanded="false" aria-controls="artwork-tools">Artwork</button>
             </div>
             <div class="scene-tool-group" role="group" aria-label="History">
               <button id="undo-scene" class="scene-icon-button" type="button" aria-label="Undo" title="Undo" disabled>
-                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4-4 4 4 4M3 8h9a4 4 0 0 1 0 8h-2" /></svg>
+                <svg class="icon" aria-hidden="true"><use href="#icon-undo" /></svg>
               </button>
               <button id="redo-scene" class="scene-icon-button" type="button" aria-label="Redo" title="Redo" disabled>
-                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m13 4 4 4-4 4m4-4H8a4 4 0 0 0 0 8h2" /></svg>
+                <svg class="icon" aria-hidden="true"><use href="#icon-redo" /></svg>
               </button>
             </div>
           </div>
@@ -236,6 +277,67 @@
             </details>
           </div>
         </section>
+        <section id="artwork-tools" aria-label="Artwork tools" hidden>
+          <div class="artwork-controls">
+            <form id="add-tile-layer-form">
+              <input id="tile-layer-name" aria-label="New tile layer name" placeholder="Layer name" required autocomplete="off" />
+              <button type="submit">Add layer</button>
+            </form>
+            <div class="artwork-layer-picker">
+              <label for="tile-layer">Tile layer</label>
+              <span class="select-field"><select id="tile-layer" disabled></select></span>
+            </div>
+            <div class="artwork-icon-group" role="group" aria-label="Tile layer controls">
+              <span class="artwork-icon-control">
+                <button id="tile-layer-visibility" class="scene-icon-button" type="button" aria-labelledby="tile-layer-visibility-label" disabled><svg class="icon" aria-hidden="true"><use id="tile-layer-visibility-icon" href="#icon-eye" /></svg></button>
+                <span class="icon-tooltip" id="tile-layer-visibility-label">Hide layer</span>
+              </span>
+              <span class="artwork-icon-control">
+                <button id="raise-tile-layer" class="scene-icon-button" type="button" aria-labelledby="raise-tile-layer-label" disabled><svg class="icon" aria-hidden="true"><use href="#icon-arrow-up" /></svg></button>
+                <span class="icon-tooltip" id="raise-tile-layer-label">Move layer up</span>
+              </span>
+              <span class="artwork-icon-control">
+                <button id="lower-tile-layer" class="scene-icon-button" type="button" aria-labelledby="lower-tile-layer-label" disabled><svg class="icon" aria-hidden="true"><use href="#icon-arrow-down" /></svg></button>
+                <span class="icon-tooltip" id="lower-tile-layer-label">Move layer down</span>
+              </span>
+              <span class="artwork-icon-control">
+                <button id="remove-tile-layer" class="scene-icon-button" type="button" aria-labelledby="remove-tile-layer-label" disabled><svg class="icon" aria-hidden="true"><use href="#icon-trash" /></svg></button>
+                <span class="icon-tooltip" id="remove-tile-layer-label">Remove layer</span>
+              </span>
+            </div>
+            <label class="blockout-visibility"><input id="show-artwork" type="checkbox" checked /> Show artwork</label>
+          </div>
+          <div class="artwork-controls">
+            <div class="artwork-icon-group" role="group" aria-label="Artwork editing tools">
+              <span class="artwork-icon-control">
+                <button id="choose-artwork-asset" class="scene-icon-button" type="button" aria-labelledby="choose-artwork-asset-label" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#icon-library" /></svg></button>
+                <span class="icon-tooltip" id="choose-artwork-asset-label">Choose asset</span>
+              </span>
+              <span class="artwork-icon-control">
+                <button id="select-artwork" class="scene-icon-button" type="button" aria-labelledby="select-artwork-label" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#icon-move" /></svg></button>
+                <span class="icon-tooltip" id="select-artwork-label">Select &amp; move</span>
+              </span>
+              <span class="artwork-icon-control">
+                <button id="erase-artwork" class="scene-icon-button" type="button" aria-labelledby="erase-artwork-label" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#icon-eraser" /></svg></button>
+                <span class="icon-tooltip" id="erase-artwork-label">Erase tile</span>
+              </span>
+            </div>
+            <span id="active-artwork-brush" role="status"></span>
+            <button id="apply-artwork-selection" type="button" disabled>Apply to selection</button>
+            <details class="artwork-coordinates">
+              <summary>Coordinates</summary>
+              <form id="artwork-coordinate-form">
+                <div class="blockout-coordinate-fields">
+                  <label>Tile X <input id="artwork-x" type="number" min="0" value="0" required /></label>
+                  <label>Tile Y <input id="artwork-y" type="number" min="0" value="0" required /></label>
+                  <label>Width in tiles <input id="artwork-width" type="number" min="1" value="1" required /></label>
+                  <label>Height in tiles <input id="artwork-height" type="number" min="1" value="1" required /></label>
+                </div>
+                <button id="apply-artwork-coordinates" type="submit" disabled>Place at coordinates</button>
+              </form>
+            </details>
+          </div>
+        </section>
         <div id="panels">
           <button data-panel="navigator">Navigator</button
           ><button data-panel="inspector">Inspector</button>
@@ -244,6 +346,12 @@
         <div id="workspace-feedback">
           <div id="hints" role="status"></div>
           <span id="blockout-status" role="status" hidden></span>
+          <span id="artwork-feedback" role="status"></span>
+          <span id="tiled-export-error" role="alert"></span>
+          <div id="artwork-save-feedback" hidden>
+            <span id="artwork-error" role="alert"></span>
+            <button id="dismiss-artwork-error" type="button" aria-label="Dismiss artwork save warning">Dismiss</button>
+          </div>
           <div id="blockout-save-feedback" hidden>
             <span id="blockout-save-error" role="alert"></span>
             <button id="dismiss-blockout-save-error" type="button" aria-label="Dismiss blockout save warnings">Dismiss</button>
@@ -255,6 +363,57 @@
         <div id="details"></div>
       </aside>
     </main>
+    <dialog id="asset-picker" aria-labelledby="asset-picker-title">
+      <h2 id="asset-picker-title">Asset library</h2>
+      <div id="asset-browser">
+        <div class="asset-picker-filters">
+          <span class="select-field"><select id="asset-kind" aria-label="Asset type">
+            <option value="tile">Tiles</option>
+            <option value="sprite">Sprites</option>
+          </select></span>
+          <input id="asset-search" type="search" aria-label="Search assets" placeholder="Search assets" autocomplete="off" />
+          <button id="open-asset-import" type="button">Import assets</button>
+        </div>
+        <div id="asset-results" role="group" aria-label="Matching assets"></div>
+        <div class="asset-picker-footer">
+          <span id="asset-results-status" role="status"></span>
+          <button id="show-all-assets" type="button" hidden>Show all assets</button>
+          <button id="asset-previous" type="button" disabled>Previous</button>
+          <button id="asset-next" type="button" disabled>Next</button>
+          <button id="close-asset-picker" type="button">Close</button>
+        </div>
+        <div id="asset-selection" class="asset-preview" hidden>
+          <img id="selected-asset-image" alt="" />
+          <div><strong id="selected-asset-name"></strong><span id="selected-asset-size"></span></div>
+          <button id="use-selected-asset" class="primary" type="button" disabled>Use asset</button>
+        </div>
+      </div>
+      <form id="asset-import" hidden>
+        <label for="asset-import-kind">Import format</label>
+        <span class="select-field"><select id="asset-import-kind" name="kind" aria-describedby="asset-import-guidance">
+          <option value="tiles">PNG tilesheet</option>
+          <option value="sprite">PNG sprite</option>
+          <option value="gbc-atlas">GBC Atlas pack</option>
+        </select></span>
+        <p id="asset-import-guidance"></p>
+        <label for="asset-import-png">PNG image</label>
+        <input id="asset-import-png" type="file" name="png" accept=".png,image/png" required />
+        <div id="asset-import-manifest-field" hidden>
+          <label for="asset-import-manifest">Atlas manifest</label>
+          <input id="asset-import-manifest" type="file" name="manifest" accept=".json,application/json" />
+        </div>
+        <div class="asset-preview" hidden>
+          <img id="asset-import-preview" alt="Selected PNG preview" />
+          <span id="asset-import-details"></span>
+        </div>
+        <p id="asset-import-error" role="alert"></p>
+        <div class="asset-picker-footer">
+          <span id="asset-import-status" role="status"></span>
+          <button id="back-to-assets" type="button">Back to library</button>
+          <button id="asset-import-submit" class="primary" type="submit">Import</button>
+        </div>
+      </form>
+    </dialog>
     <footer id="editor-footer" hidden>
       <span id="location"></span>
       <div class="editor-status-tools">

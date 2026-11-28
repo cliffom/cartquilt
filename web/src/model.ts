@@ -1,4 +1,11 @@
 import {
+  type ArtworkEdit,
+  type ArtworkHistoryEdit,
+  type ArtworkMove,
+  isArtworkReference,
+  type TileLayer,
+} from "./artwork-model.js";
+import {
   defaultMovementProfile,
   elementKinds,
   isKeyOf,
@@ -43,6 +50,7 @@ export type Scene = {
   entrances: Entrance[];
   exits: Exit[];
   blockout: Blockout;
+  tileLayers: TileLayer[];
 };
 export type Project = { version: typeof projectVersion; id: string; name: string; scenes: Scene[] };
 export type Snapshot = { project: Project; revision: string };
@@ -78,6 +86,34 @@ function items<T extends { id: string }>(
 const id = /^[a-z][a-z0-9-]*$/;
 const asset = /^[a-zA-Z0-9_-]+\.png$/;
 const sceneColor = /^#[0-9a-f]{6}$/i;
+function decodeTileLayers(value: unknown, width: number, height: number): TileLayer[] {
+  return items(value === undefined ? [] : value, (layer) => {
+    if (
+      !Array.isArray(layer.tiles) ||
+      (layer.hidden !== undefined && typeof layer.hidden !== "boolean")
+    )
+      throw Error("Invalid tile layer");
+    const occupied = new Uint8Array(layer.tiles.length ? width * height : 0);
+    const tiles = layer.tiles.map((value) => {
+      const region = record(value);
+      const tile = region.tile;
+      if (!isArtworkReference("tile", tile)) throw Error("Invalid artwork tile");
+      const x = integer(region.x, 0, width - 1);
+      const y = integer(region.y, 0, height - 1);
+      const w = integer(region.width, 1, width - x);
+      const h = integer(region.height, 1, height - y);
+      for (let row = y; row < y + h; row++) {
+        for (let column = x; column < x + w; column++) {
+          const index = row * width + column;
+          if (occupied[index]) throw Error("Overlapping tiles on one layer");
+          occupied[index] = 1;
+        }
+      }
+      return { tile, x, y, width: w, height: h };
+    });
+    return { id: str(layer.id, id), name: str(layer.name), hidden: layer.hidden === true, tiles };
+  });
+}
 function decodeBlockout(value: unknown, width: number, height: number): Blockout {
   if (value === undefined) return { profile: defaultMovementProfile, terrain: [], elements: [] };
   const layer = record(value);
@@ -148,7 +184,7 @@ export function decode(value: unknown): Snapshot {
         name: str(a.name),
         width: w,
         height: h,
-        sprite: str(a.sprite, asset),
+        sprite: isArtworkReference("sprite", a.sprite) ? a.sprite : str(a.sprite, asset),
         x: integer(a.x, 0, width * pixelsPerTile - w),
         y: integer(a.y, 0, height * pixelsPerTile - h),
       };
@@ -163,6 +199,7 @@ export function decode(value: unknown): Snapshot {
       world: { x: integer(world.x), y: integer(world.y) },
       actors,
       blockout: decodeBlockout(s.blockout, width, height),
+      tileLayers: decodeTileLayers(s.tileLayers, width, height),
       entrances: items(s.entrances === undefined ? [] : s.entrances, (entry) => ({
         id: str(entry.id, id),
         name: str(entry.name),
@@ -206,7 +243,12 @@ export function decode(value: unknown): Snapshot {
 
 export type MoveActor = { type: "moveActor"; actor: string; axis: keyof Point; value: number };
 export type HistoryDirection = "undo" | "redo";
-type SceneHistory = { actors: Actor[] } | { blockout: Blockout | undefined };
+type SceneHistory =
+  | { actors: Actor[] }
+  | { blockout: Blockout | undefined }
+  | { artwork: ArtworkHistoryEdit | undefined; reverseActorMove?: ActorMoveEdit };
+
+type ActorMoveEdit = Extract<ArtworkMove, { op: "move-actor" }>;
 
 export class SceneDocument {
   private saved: Scene;
@@ -231,9 +273,107 @@ export class SceneDocument {
       entrances: saved.entrances,
       exits: saved.exits,
       blockout: saved.blockout,
+      tileLayers: saved.tileLayers,
     });
     this.saved = update(this.saved);
     this.scene = update(this.scene);
+  }
+  acceptPlacedActor(actor: Actor, index: number, position?: Point) {
+    const insert = (actors: Actor[], value: Actor) => [
+      ...actors.slice(0, index),
+      value,
+      ...actors.slice(index),
+    ];
+    this.saved = { ...this.saved, actors: insert(this.saved.actors, actor) };
+    this.scene = { ...this.scene, actors: insert(this.scene.actors, { ...actor, ...position }) };
+  }
+  acceptActorPosition(actor: Actor, updateWorking: boolean) {
+    const update = (scene: Scene) => ({
+      ...scene,
+      actors: scene.actors.map((entry) => (entry.id === actor.id ? actor : entry)),
+    });
+    this.saved = update(this.saved);
+    if (updateWorking) this.scene = update(this.scene);
+  }
+  forgetActor(id: string) {
+    const without = (actors: Actor[]) => actors.filter((actor) => actor.id !== id);
+    this.saved = { ...this.saved, actors: without(this.saved.actors) };
+    this.scene = { ...this.scene, actors: without(this.scene.actors) };
+  }
+  artworkHistory(direction: HistoryDirection) {
+    const entry = this.stack(direction).at(-1);
+    return entry && "artwork" in entry ? entry.artwork : undefined;
+  }
+  beginArtworkEdit() {
+    const entry: SceneHistory = { artwork: undefined };
+    this.past.push(entry);
+    this.group = undefined;
+    return (inverse?: ArtworkHistoryEdit, forwardActorMove?: ActorMoveEdit) => {
+      if (inverse) {
+        entry.artwork = inverse;
+        entry.reverseActorMove = forwardActorMove;
+        this.future = [];
+      } else {
+        this.past.splice(this.past.indexOf(entry), 1);
+      }
+    };
+  }
+  acceptArtworkHistory(direction: HistoryDirection, inverse?: ArtworkHistoryEdit) {
+    const entry = this.stack(direction).at(-1);
+    if (!entry || !("artwork" in entry) || !entry.artwork) return;
+    const reverse = entry.reverseActorMove ?? inverse;
+    if (!reverse) return;
+    this.advanceHistory(direction, {
+      artwork: reverse,
+      reverseActorMove:
+        entry.reverseActorMove && entry.artwork.op === "move-actor" ? entry.artwork : undefined,
+    });
+  }
+  captureArtworkInverse(edit: ArtworkEdit | ArtworkHistoryEdit) {
+    const before = this.saved;
+    const working = this.scene;
+    return (removedActor?: string): ArtworkHistoryEdit | undefined => {
+      switch (edit.op) {
+        case "move-actor": {
+          const previous = working.actors.find(({ id }) => id === edit.actorId);
+          if (previous && (previous.x !== edit.position.x || previous.y !== edit.position.y))
+            return { ...edit, position: { x: previous.x, y: previous.y } };
+          return;
+        }
+        case "move-tile": {
+          const { x, y } = edit.area;
+          if (x !== edit.position.x || y !== edit.position.y)
+            return { ...edit, area: { ...edit.area, ...edit.position }, position: { x, y } };
+          return;
+        }
+        case "place-sprite": {
+          const actor = this.saved.actors.at(-1);
+          if (actor && this.saved.actors.length > before.actors.length)
+            return { op: "remove-actor", actorId: actor.id };
+          return;
+        }
+        case "restore-actor": {
+          const actor = this.saved.actors[edit.actorIndex];
+          if (actor) return { op: "remove-actor", actorId: actor.id };
+          return;
+        }
+        case "remove-actor": {
+          const actorIndex = before.actors.findIndex(({ id }) => id === edit.actorId);
+          const actor = working.actors.find(({ id }) => id === edit.actorId);
+          if (actor && actorIndex >= 0 && removedActor)
+            return {
+              op: "restore-actor",
+              actorRecord: removedActor,
+              actorIndex,
+              position: { x: actor.x, y: actor.y },
+            };
+          return;
+        }
+        default:
+          if (JSON.stringify(before.tileLayers) !== JSON.stringify(this.saved.tileLayers))
+            return { op: "restore-layers", layers: before.tileLayers };
+      }
+    };
   }
   get dirty() {
     return JSON.stringify(this.scene) !== JSON.stringify(this.baseline);
@@ -279,7 +419,12 @@ export class SceneDocument {
     const entry = this.stack(direction).at(-1);
     if (!entry || !("actors" in entry) || this.restoringBlockout) return;
     this.advanceHistory(direction, { actors: this.scene.actors });
-    this.scene = { ...this.scene, actors: entry.actors };
+    this.scene = {
+      ...this.scene,
+      actors: this.scene.actors.map(
+        (actor) => entry.actors.find(({ id }) => id === actor.id) ?? actor,
+      ),
+    };
   }
   private trimBlockoutHistory() {
     let blockoutSteps = 0;
@@ -378,13 +523,43 @@ export class Workspace {
   acceptSceneAction(
     next: Snapshot,
     target: string,
-    action: "rename" | "color" | "delete" | "position" | "connection" | "blockout",
+    action: "rename" | "color" | "delete" | "position" | "connection" | "blockout" | "artwork",
+    edit?: ArtworkEdit,
+    updateWorkingActor = false,
   ) {
     const current = this.saved.project;
     const expected =
       action === "delete" ? current.scenes.filter((s) => s.id !== target) : current.scenes;
     const previous = current.scenes.find((s) => s.id === target);
     const updated = next.project.scenes.find((s) => s.id === target);
+    const addedActor =
+      edit?.op === "place-sprite" &&
+      previous &&
+      updated?.actors.length === previous.actors.length + 1
+        ? updated.actors.at(-1)
+        : undefined;
+    const restoredActor =
+      edit?.op === "restore-actor" ? updated?.actors[edit.actorIndex] : undefined;
+    const affected =
+      edit?.op === "move-actor" || edit?.op === "remove-actor" ? edit.actorId : undefined;
+    const previousIndex = previous?.actors.findIndex((actor) => actor.id === affected) ?? -1;
+    const previousActor = previous?.actors[previousIndex];
+    const movedActor = edit?.op === "move-actor" ? updated?.actors[previousIndex] : undefined;
+    const comparableActors = (actors: Actor[]) => {
+      if (addedActor) return actors.slice(0, -1);
+      if (edit?.op === "restore-actor" && restoredActor) {
+        return [...actors.slice(0, edit.actorIndex), ...actors.slice(edit.actorIndex + 1)];
+      }
+      if (edit?.op === "remove-actor" && previousActor) {
+        return [...actors.slice(0, previousIndex), previousActor, ...actors.slice(previousIndex)];
+      }
+      if (movedActor && previousActor && edit?.op === "move-actor") {
+        return actors.map((actor) =>
+          actor.id === affected ? { ...actor, x: previousActor.x, y: previousActor.y } : actor,
+        );
+      }
+      return actors;
+    };
     const comparable = (scene: Scene) =>
       scene.id === target && action !== "delete"
         ? {
@@ -395,6 +570,8 @@ export class Workspace {
             entrances: action === "connection" ? previous?.entrances : scene.entrances,
             exits: action === "connection" ? previous?.exits : scene.exits,
             blockout: action === "blockout" ? previous?.blockout : scene.blockout,
+            tileLayers: action === "artwork" ? previous?.tileLayers : scene.tileLayers,
+            actors: comparableActors(scene.actors),
           }
         : scene;
     if (
@@ -419,7 +596,16 @@ export class Workspace {
         this.desk = "world";
       }
     } else if (updated) {
-      this.documentFor(target).acceptSceneMetadata(updated);
+      const document = this.documentFor(target);
+      document.acceptSceneMetadata(updated);
+      if (addedActor) document.acceptPlacedActor(addedActor, updated.actors.length - 1);
+      if (restoredActor && edit?.op === "restore-actor")
+        document.acceptPlacedActor(restoredActor, edit.actorIndex, edit.position);
+      if (movedActor) document.acceptActorPosition(movedActor, updateWorkingActor);
+      if (edit?.op === "remove-actor" && previousActor) {
+        document.forgetActor(edit.actorId);
+        if (this.objects.get(target) === edit.actorId) this.objects.delete(target);
+      }
     }
     this.saved = next;
   }

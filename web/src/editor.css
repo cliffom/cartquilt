@@ -287,9 +287,10 @@ h1 {
   padding: 0;
   place-items: center;
 }
-.scene-icon-button svg {
+.icon {
   width: 16px;
   height: 16px;
+  flex: none;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
@@ -732,6 +733,7 @@ footer {
 #new-scene-dialog,
 #connection-dialog,
 #scene-action-dialog,
+#asset-picker,
 #confirm-project-close {
   width: min(420px, calc(100% - 28px));
   padding: 20px;
@@ -744,6 +746,7 @@ footer {
 #new-scene-dialog::backdrop,
 #connection-dialog::backdrop,
 #scene-action-dialog::backdrop,
+#asset-picker::backdrop,
 #confirm-project-close::backdrop {
   background: #000a;
 }
@@ -1386,7 +1389,8 @@ footer {
   inset: 0;
   pointer-events: none;
 }
-#canvas.showing-blockout-grid .art:not(.blank-art)::after {
+#canvas.showing-blockout-grid .art:not(.blank-art)::after,
+#canvas.showing-artwork-grid .art::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1395,6 +1399,279 @@ footer {
     linear-gradient(to bottom, var(--border) 1px, transparent 1px);
   background-size: calc(100% / var(--scene-columns)) calc(100% / var(--scene-rows));
   box-shadow: inset 0 0 0 1px var(--border);
+}
+
+#artwork-tools:not([hidden]) {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 12px;
+}
+.artwork-controls,
+.artwork-layer-picker,
+.artwork-icon-group,
+#add-tile-layer-form,
+#artwork-save-feedback:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.artwork-controls {
+  gap: 8px 12px;
+}
+.artwork-icon-control {
+  position: relative;
+}
+.artwork-icon-control button {
+  height: 32px;
+}
+.icon-tooltip {
+  position: absolute;
+  z-index: 2;
+  inset-inline-start: 0;
+  top: 100%;
+  visibility: hidden;
+  width: max-content;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--canvas);
+  color: var(--text);
+  box-shadow: 0 3px 12px #0006;
+}
+.artwork-icon-control:not([data-tooltip-dismissed]):is(:hover, :has(:focus-visible)) .icon-tooltip {
+  visibility: visible;
+}
+#artwork-tools :is(input:not([type="checkbox"]), select) {
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background-color: var(--canvas);
+}
+#artwork-tools input:not([type="checkbox"]) {
+  padding: 4px 7px;
+}
+#tile-layer-name {
+  width: 120px;
+}
+#tile-layer {
+  max-width: min(160px, 40vw);
+}
+#erase-artwork[aria-pressed="true"],
+#select-artwork[aria-pressed="true"],
+#choose-artwork-asset[data-active],
+#toggle-artwork[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+.artwork-icon-control button:is([aria-pressed="true"], [data-active]) {
+  color: var(--accent);
+}
+#tile-layer-visibility[data-layer-hidden] {
+  color: var(--muted);
+  border-style: dashed;
+}
+.actor-actions,
+.asset-picker-filters,
+.asset-picker-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.actor-actions {
+  margin-top: 12px;
+}
+#asset-picker {
+  width: min(680px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+}
+#asset-search {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+#asset-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  align-content: start;
+  gap: 6px;
+  min-height: 68px;
+  max-height: 50dvh;
+  overflow: auto;
+  margin: 12px 0;
+}
+#asset-results button {
+  display: grid;
+  gap: 5px;
+  place-items: center;
+  overflow-wrap: anywhere;
+}
+#asset-results button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+#asset-results button span {
+  min-width: 0;
+}
+#asset-results img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.asset-picker-footer span {
+  margin-inline-end: auto;
+}
+.asset-preview:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--canvas);
+  margin-top: 12px;
+}
+.asset-preview img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+#asset-import-preview {
+  width: min(180px, 45vw);
+  height: 112px;
+}
+#selected-asset-size {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+}
+#use-selected-asset {
+  margin-inline-start: auto;
+}
+#asset-picker .primary {
+  width: auto;
+  margin-block: 0;
+}
+#asset-import:not([hidden]),
+#asset-import-manifest-field:not([hidden]) {
+  display: grid;
+  gap: 8px;
+}
+#asset-import :is(p, .asset-preview) {
+  margin: 0;
+}
+#asset-import-guidance,
+#asset-import-details {
+  color: var(--muted);
+}
+#asset-import-error,
+#tiled-export-error {
+  color: var(--draft);
+}
+#asset-import-error:empty,
+#tiled-export-error:empty {
+  display: none;
+}
+#active-artwork-brush:empty {
+  display: none;
+}
+.artwork-coordinates summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+#artwork-coordinate-form {
+  position: absolute;
+  inset-inline-end: 12px;
+  inset-block-start: calc(100% + 6px);
+  width: min(280px, calc(100% - 24px));
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bar);
+}
+#apply-artwork-coordinates {
+  margin-top: 8px;
+}
+#artwork-feedback:empty {
+  display: none;
+}
+#artwork-error {
+  color: var(--draft);
+  overflow-wrap: anywhere;
+}
+#canvas.placing-artwork:where(:not(.middle-panning)) :is(.art, .art button) {
+  cursor: crosshair;
+}
+#canvas.erasing-artwork:where(:not(.middle-panning)) :is(.art, .art button) {
+  cursor: url("/eraser-cursor.svg") 5 18, crosshair;
+}
+#canvas.selecting-artwork:where(:not(.moving-artwork, .middle-panning)) button[data-actor-id],
+#canvas.selecting-artwork:where(:not(.moving-artwork, .middle-panning)) .movable-artwork-layer > .artwork-tile {
+  cursor: move;
+}
+.movable-artwork-layer > .artwork-tile {
+  pointer-events: auto;
+}
+.artwork-tiles,
+.artwork-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.artwork-tile {
+  position: absolute;
+  image-rendering: pixelated;
+  background-repeat: repeat;
+}
+#canvas .artwork-selection,
+#canvas .artwork-move-preview {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  outline: 1px solid var(--accent);
+}
+#canvas .artwork-move-preview {
+  opacity: 0.8;
+  image-rendering: pixelated;
+}
+#canvas .artwork-move-preview img {
+  width: 100%;
+  height: 100%;
+}
+#canvas .artwork-move-preview.blocked {
+  outline: 2px solid var(--draft);
+}
+#canvas .artwork-move-footprint {
+  --footprint-color: var(--accent);
+  --footprint-line: color-mix(in srgb, var(--footprint-color) 65%, transparent);
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  outline: 2px solid var(--footprint-color);
+  outline-offset: -2px;
+  background-color: color-mix(in srgb, var(--footprint-color) 28%, transparent);
+  background-image:
+    linear-gradient(to right, var(--footprint-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--footprint-line) 1px, transparent 1px);
+}
+#canvas .artwork-move-footprint.blocked {
+  --footprint-color: var(--draft);
+}
+#canvas.moving-artwork .scene-cell-hover {
+  visibility: hidden;
+}
+#canvas.moving-artwork,
+#canvas.moving-artwork button {
+  cursor: grabbing;
 }
 .blockout-terrain,
 .blockout-marker,

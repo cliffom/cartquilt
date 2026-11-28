@@ -19,6 +19,7 @@ type SceneActionInput struct {
 	Entrance     *Entrance      `json:"entrance,omitempty"`
 	Exit         *Exit          `json:"exit,omitempty"`
 	Blockout     []BlockoutEdit `json:"blockout,omitempty"`
+	Artwork      *ArtworkEdit   `json:"artwork,omitempty"`
 }
 
 func ApplySceneAction(path, id string, input SceneActionInput) (SceneResult, error) {
@@ -43,6 +44,11 @@ func ApplySceneAction(path, id string, input SceneActionInput) (SceneResult, err
 	case "duplicate", "delete":
 	case "blockout":
 		return applyBlockout(path, id, input.BaseRevision, input.Blockout)
+	case "artwork":
+		if input.Artwork == nil {
+			return SceneResult{}, artworkError("provide an artwork operation")
+		}
+		return applyArtwork(path, id, input.BaseRevision, *input.Artwork)
 	case "entrance", "exit", "remove-entrance", "remove-exit":
 		return applyConnectionAction(path, id, input)
 	default:

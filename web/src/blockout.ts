@@ -24,6 +24,7 @@ export function setupBlockout(
   stopPlacement: () => void,
   saveStateChanged: () => void,
   brushModeChanged: (active: boolean) => void,
+  canEdit: () => boolean,
 ) {
   const toggle = get<HTMLButtonElement>("toggle-blockout");
   const panel = get("blockout-tools");
@@ -233,7 +234,7 @@ export function setupBlockout(
     }
   }
   async function save(target: string, edit: BlockoutEdit) {
-    if (restoring) return;
+    if (restoring || !canEdit()) return;
     const document = workspace.documentFor(target);
     const finish = document.beginBlockoutEdit();
     await changeBlockout(target, () =>
@@ -375,13 +376,17 @@ export function setupBlockout(
     get busy() {
       return pending.size > 0;
     },
+    get editing() {
+      return open;
+    },
     get saveFailed() {
       return saveErrors.size > 0;
     },
     get visible() {
       return show.checked;
     },
-    disarm() {
+    disarm(closeTools = false) {
+      if (closeTools) open = false;
       brush.value = selectBrush;
       sync();
     },

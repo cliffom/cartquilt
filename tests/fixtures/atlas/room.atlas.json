@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "atlas_room",
+  "png": "room.png",
+  "palettes": [[[0, 0, 0], [31, 31, 31], [16, 16, 16], [24, 24, 24]]],
+  "cell_palettes": [0, 0, 0, 0],
+  "regions": [
+    { "name": "checker_floor", "kind": "tile", "x": 0, "y": 0, "width": 8, "height": 16 },
+    { "name": "courier_frame", "kind": "sprite", "x": 8, "y": 0, "width": 8, "height": 16, "origin": [4, 15] }
+  ],
+  "animations": [{ "name": "idle", "frames": [{ "region": "courier_frame", "duration_ms": 120 }] }]
+}

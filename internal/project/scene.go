@@ -26,7 +26,8 @@ type AddSceneInput struct {
 
 type SceneResult struct {
 	Snapshot
-	SceneID string `json:"sceneId"`
+	SceneID      string `json:"sceneId"`
+	RemovedActor string `json:"removedActor,omitempty"`
 }
 
 func AddScene(path string, input AddSceneInput) (SceneResult, error) {
@@ -61,6 +62,21 @@ func newObjectID(kind string) string {
 }
 
 func writeScenes(path, baseRevision string, edit func(Project, []json.RawMessage) ([]json.RawMessage, string, error)) (SceneResult, error) {
+	return writeManifest(path, baseRevision, func(_ string, current Project, manifest map[string]json.RawMessage) (string, error) {
+		var entries []json.RawMessage
+		if err := json.Unmarshal(manifest["scenes"], &entries); err != nil {
+			return "", err
+		}
+		entries, id, err := edit(current, entries)
+		if err != nil {
+			return "", err
+		}
+		manifest["scenes"], err = json.Marshal(entries)
+		return id, err
+	})
+}
+
+func writeManifest(path, baseRevision string, edit func(string, Project, map[string]json.RawMessage) (string, error)) (SceneResult, error) {
 	path, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return SceneResult{}, err
@@ -98,15 +114,7 @@ func writeScenes(path, baseRevision string, edit func(Project, []json.RawMessage
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return SceneResult{}, err
 	}
-	var entries []json.RawMessage
-	if err := json.Unmarshal(manifest["scenes"], &entries); err != nil {
-		return SceneResult{}, err
-	}
-	entries, id, err := edit(current.Project, entries)
-	if err != nil {
-		return SceneResult{}, err
-	}
-	manifest["scenes"], err = json.Marshal(entries)
+	id, err := edit(path, current.Project, manifest)
 	if err != nil {
 		return SceneResult{}, err
 	}
