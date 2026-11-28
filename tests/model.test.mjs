@@ -327,10 +327,13 @@ test("a later actor edit stays ahead of a pending blockout save in undo history"
   assert.equal(doc.canRedo, true);
 });
 
-test("blockout undo retains only the latest 50 saved edits and supports redoing them", async () => {
+test("the 51st blockout edit trims the oldest blockout step and preserves actor undo", async () => {
   const doc = new SceneDocument(decode(response).project.scenes[0]);
   const save = async (blockout) => doc.acceptSceneMetadata({ ...doc.baseline, blockout });
-  const committedEdits = 55;
+  const actorX = doc.scene.actors[0].x;
+  doc.apply({ type: "moveActor", actor: "courier", axis: "x", value: actorX + 1 });
+
+  const committedEdits = 51;
   for (let x = 0; x < committedEdits; x++) {
     const finish = doc.beginBlockoutEdit();
     const previous = doc.baseline.blockout;
@@ -352,9 +355,16 @@ test("blockout undo retains only the latest 50 saved edits and supports redoing 
     undone++;
   }
   assert.equal(undone, 50);
-  assert.equal(doc.scene.blockout.elements[0].x, 4);
+  assert.equal(doc.scene.blockout.elements[0].x, 0);
+  assert.equal(doc.scene.actors[0].x, actorX + 1);
+  assert.equal(doc.canUndo, true);
+  doc.undo();
+  assert.equal(doc.scene.actors[0].x, actorX);
+  assert.equal(doc.dirty, false);
   assert.equal(doc.canUndo, false);
 
+  doc.redo();
+  assert.equal(doc.scene.actors[0].x, actorX + 1);
   while (doc.hasBlockoutHistory("redo")) {
     await doc.restoreBlockoutHistory("redo", save);
   }

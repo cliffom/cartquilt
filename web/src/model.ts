@@ -286,8 +286,7 @@ export class SceneDocument {
     for (let i = this.past.length - 1; i >= 0; i--) {
       const entry = this.past[i];
       if ("blockout" in entry && entry.blockout && ++blockoutSteps > maxBlockoutUndoSteps) {
-        // Drop the oldest part of the timeline so remaining actor and blockout edits stay ordered.
-        this.past.splice(0, i + 1);
+        this.past.splice(i, 1);
         return;
       }
     }
