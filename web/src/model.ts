@@ -1,4 +1,13 @@
 import {
+  defaultMovementProfile,
+  elementKinds,
+  isKeyOf,
+  maxBlockoutEntries,
+  movementProfiles,
+  terrainKinds,
+  type Blockout,
+} from "./blockout-model.js";
+import {
   maxSceneTilesPerAxis,
   minSceneTilesPerAxis,
   pixelsPerTile,
@@ -6,6 +15,9 @@ import {
 } from "./project-constants.js";
 
 export type Point = { x: number; y: number };
+type Camera = Point & { zoom: number };
+const fittedSceneCamera = { x: 0, y: 0, zoom: 1 } as const;
+const maxBlockoutUndoSteps = 50;
 export type Actor = Point & {
   id: string;
   name: string;
@@ -30,6 +42,7 @@ export type Scene = {
   actors: Actor[];
   entrances: Entrance[];
   exits: Exit[];
+  blockout: Blockout;
 };
 export type Project = { version: typeof projectVersion; id: string; name: string; scenes: Scene[] };
 export type Snapshot = { project: Project; revision: string };
@@ -65,6 +78,60 @@ function items<T extends { id: string }>(
 const id = /^[a-z][a-z0-9-]*$/;
 const asset = /^[a-zA-Z0-9_-]+\.png$/;
 const sceneColor = /^#[0-9a-f]{6}$/i;
+function decodeBlockout(value: unknown, width: number, height: number): Blockout {
+  if (value === undefined) return { profile: defaultMovementProfile, terrain: [], elements: [] };
+  const layer = record(value);
+  const profile = layer.profile;
+  if (!isKeyOf(movementProfiles, profile)) throw Error("Invalid blockout movement profile");
+  const area = (entry: Record<string, unknown>) => {
+    const x = integer(entry.x, 0, width - 1);
+    const y = integer(entry.y, 0, height - 1);
+    return {
+      x,
+      y,
+      width: integer(entry.width, 1, width - x),
+      height: integer(entry.height, 1, height - y),
+    };
+  };
+  const regions = layer.terrain ?? [];
+  if (!Array.isArray(regions) || regions.length > maxBlockoutEntries)
+    throw Error("Invalid blockout terrain list");
+  const occupied = new Uint8Array(regions.length ? width * height : 0);
+  const terrain = regions.map((value) => {
+    const entry = record(value);
+    const kind = entry.kind;
+    if (!isKeyOf(terrainKinds, kind)) throw Error("Invalid blockout terrain kind");
+    const bounds = area(entry);
+    for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
+      for (let x = bounds.x; x < bounds.x + bounds.width; x++) {
+        const index = y * width + x;
+        if (occupied[index]) throw Error("Overlapping blockout terrain");
+        occupied[index] = 1;
+      }
+    }
+    return { kind, ...bounds };
+  });
+  let hasSpawn = false;
+  const elements = items(layer.elements ?? [], (entry) => {
+    const kind = entry.kind;
+    if (!isKeyOf(elementKinds, kind)) throw Error("Invalid blockout element kind");
+    const bounds = area(entry);
+    if (elementKinds[kind].point && (bounds.width !== 1 || bounds.height !== 1))
+      throw Error("Blockout markers use one tile");
+    if (kind === "player-spawn") {
+      if (hasSpawn) throw Error("A scene can have one player spawn");
+      hasSpawn = true;
+    }
+    return {
+      id: str(entry.id, id),
+      kind,
+      ...bounds,
+      label: entry.label === undefined ? undefined : str(entry.label),
+    };
+  });
+  if (elements.length > maxBlockoutEntries) throw Error("Too many blockout elements");
+  return { profile, terrain, elements };
+}
 export function decode(value: unknown): Snapshot {
   const snapshot = record(value),
     p = record(snapshot.project);
@@ -95,6 +162,7 @@ export function decode(value: unknown): Snapshot {
       height,
       world: { x: integer(world.x), y: integer(world.y) },
       actors,
+      blockout: decodeBlockout(s.blockout, width, height),
       entrances: items(s.entrances === undefined ? [] : s.entrances, (entry) => ({
         id: str(entry.id, id),
         name: str(entry.name),
@@ -137,12 +205,16 @@ export function decode(value: unknown): Snapshot {
 }
 
 export type MoveActor = { type: "moveActor"; actor: string; axis: keyof Point; value: number };
+export type HistoryDirection = "undo" | "redo";
+type SceneHistory = { actors: Actor[] } | { blockout: Blockout | undefined };
+
 export class SceneDocument {
   private saved: Scene;
   scene: Scene;
-  private past: Scene[] = [];
-  private future: Scene[] = [];
+  private past: SceneHistory[] = [];
+  private future: SceneHistory[] = [];
   private group?: symbol;
+  private restoringBlockout = false;
   constructor(scene: Scene) {
     this.saved = structuredClone(scene);
     this.scene = structuredClone(scene);
@@ -158,11 +230,10 @@ export class SceneDocument {
       world: saved.world,
       entrances: saved.entrances,
       exits: saved.exits,
+      blockout: saved.blockout,
     });
     this.saved = update(this.saved);
     this.scene = update(this.scene);
-    this.past = this.past.map(update);
-    this.future = this.future.map(update);
   }
   get dirty() {
     return JSON.stringify(this.scene) !== JSON.stringify(this.baseline);
@@ -174,6 +245,7 @@ export class SceneDocument {
     return this.future.length > 0;
   }
   apply(op: MoveActor, group?: symbol) {
+    if (this.restoringBlockout) throw Error("Wait for the blockout history change to finish.");
     const actor = this.scene.actors.find((a) => a.id === op.actor);
     if (!actor) throw Error("Unknown actor");
     const extent = op.axis === "x" ? "width" : "height";
@@ -181,7 +253,7 @@ export class SceneDocument {
     if (!Number.isInteger(op.value) || op.value < 0 || op.value > max)
       throw Error(`Enter a whole number from 0 to ${max}.`);
     if (actor[op.axis] === op.value) return;
-    if (!group || this.group !== group) this.past.push(this.scene);
+    if (!group || this.group !== group) this.past.push({ actors: this.scene.actors });
     this.group = group;
     this.scene = {
       ...this.scene,
@@ -190,19 +262,66 @@ export class SceneDocument {
     this.future = [];
   }
   undo() {
-    const scene = this.past.pop();
-    if (scene) {
-      this.future.push(this.scene);
-      this.scene = scene;
-      this.group = undefined;
-    }
+    this.restoreActors("undo");
   }
   redo() {
-    const scene = this.future.pop();
-    if (scene) {
-      this.past.push(this.scene);
-      this.scene = scene;
-      this.group = undefined;
+    this.restoreActors("redo");
+  }
+  private stack(direction: HistoryDirection) {
+    return direction === "undo" ? this.past : this.future;
+  }
+  private advanceHistory(direction: HistoryDirection, current: SceneHistory) {
+    this.stack(direction).pop();
+    this.stack(direction === "undo" ? "redo" : "undo").push(current);
+    this.group = undefined;
+  }
+  private restoreActors(direction: HistoryDirection) {
+    const entry = this.stack(direction).at(-1);
+    if (!entry || !("actors" in entry) || this.restoringBlockout) return;
+    this.advanceHistory(direction, { actors: this.scene.actors });
+    this.scene = { ...this.scene, actors: entry.actors };
+  }
+  private trimBlockoutHistory() {
+    let blockoutSteps = 0;
+    for (let i = this.past.length - 1; i >= 0; i--) {
+      const entry = this.past[i];
+      if ("blockout" in entry && entry.blockout && ++blockoutSteps > maxBlockoutUndoSteps) {
+        this.past.splice(i, 1);
+        return;
+      }
+    }
+  }
+  beginBlockoutEdit() {
+    const entry: SceneHistory = { blockout: undefined };
+    this.past.push(entry);
+    this.group = undefined;
+    return (previous?: Blockout) => {
+      if (previous && JSON.stringify(previous) !== JSON.stringify(this.baseline.blockout)) {
+        entry.blockout = previous;
+        this.future = [];
+        this.trimBlockoutHistory();
+      } else {
+        this.past.splice(this.past.indexOf(entry), 1);
+      }
+    };
+  }
+  hasBlockoutHistory(direction: HistoryDirection) {
+    const entry = this.stack(direction).at(-1);
+    return !!entry && "blockout" in entry && entry.blockout !== undefined;
+  }
+  async restoreBlockoutHistory(
+    direction: HistoryDirection,
+    save: (layer: Blockout) => Promise<void>,
+  ) {
+    const entry = this.stack(direction).at(-1);
+    if (!entry || !("blockout" in entry) || !entry.blockout || this.restoringBlockout) return;
+    this.restoringBlockout = true;
+    const current = this.baseline.blockout;
+    try {
+      await save(entry.blockout);
+      this.advanceHistory(direction, { blockout: current });
+    } finally {
+      this.restoringBlockout = false;
     }
   }
 }
@@ -212,7 +331,8 @@ export class Workspace {
   objects = new Map<string, string>();
   positions = new Map<string, Point>();
   documents = new Map<string, SceneDocument>();
-  camera = { x: 0, y: 0, zoom: 1 };
+  camera: Camera = { x: 0, y: 0, zoom: 1 };
+  private sceneCamera: Camera = { ...fittedSceneCamera };
   constructor(private saved: Snapshot) {
     const snapshot = this.saved;
     this.selected = snapshot.project.scenes[0]?.id;
@@ -223,6 +343,18 @@ export class Workspace {
   }
   get snapshot() {
     return this.saved;
+  }
+  get viewportCamera() {
+    return this.desk === "scene" ? this.sceneCamera : this.camera;
+  }
+  openScene(id: string) {
+    this.documentFor(id);
+    this.selected = id;
+    this.resetSceneCamera();
+    this.desk = "scene";
+  }
+  resetSceneCamera() {
+    this.sceneCamera = { ...fittedSceneCamera };
   }
   acceptSceneAdditions(next: Snapshot) {
     const current = this.saved.project;
@@ -246,7 +378,7 @@ export class Workspace {
   acceptSceneAction(
     next: Snapshot,
     target: string,
-    action: "rename" | "color" | "delete" | "position" | "connection",
+    action: "rename" | "color" | "delete" | "position" | "connection" | "blockout",
   ) {
     const current = this.saved.project;
     const expected =
@@ -262,6 +394,7 @@ export class Workspace {
             world: action === "position" ? previous?.world : scene.world,
             entrances: action === "connection" ? previous?.entrances : scene.entrances,
             exits: action === "connection" ? previous?.exits : scene.exits,
+            blockout: action === "blockout" ? previous?.blockout : scene.blockout,
           }
         : scene;
     if (

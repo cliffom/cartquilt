@@ -1,6 +1,6 @@
 # Cartquilt in Codex
 
-The first increment creates empty local projects. M4 adds connected scene authoring, visual review, and revision-aware edits. [Milestones and prerequisites](../ROADMAP.md)
+Cartquilt can create and open local projects, create scenes, and preview and save editable blockouts. M4 adds connected world authoring and playable review. [Milestones and prerequisites](../ROADMAP.md)
 
 ## Create a project
 
@@ -9,6 +9,12 @@ From the repository root, run `go install ./cmd/cartquilt`. Make the installed `
 In a local Codex chat, ask **“Use @cartquilt to create a project named Threadvale Draft at /absolute/path/to/threadvale-draft.”** The `create_project` tool takes `name` and `path`. Choose a new folder inside an existing parent folder. The tool returns the saved `project.json` path, project ID, and revision. Use the returned path in the editor's [Open dialog](../README.md#open-your-own-project).
 
 In a new chat, ask **“Use @cartquilt to open /absolute/path/to/threadvale-draft.”** The read-only `open_project` tool accepts the same project folder or saved JSON path as the editor's **Open** dialog and reports its current saved revision.
+
+## Author a blockout
+
+Try **“Use @cartquilt-blockout to lay out Willow Bank as a top-down scene. Put a wall along the north edge, a walkable path through the center, and a player spawn near the west gate. Show me the proposed layout before saving.”** Use the updated local `cartquilt` binary with the bundled skill.
+
+`create_scene` adds a scene when needed. `preview_blockout` checks an ordered edit batch against the saved revision and returns candidate terrain and elements. `apply_blockout` saves that batch atomically if the revision still matches. Open the project in Cartquilt to inspect the saved result. [Bundled skill](../plugins/cartquilt/skills/cartquilt-blockout/SKILL.md)
 
 ## M4 authoring demonstration
 

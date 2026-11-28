@@ -9,6 +9,8 @@ import (
 	"cartquilt/internal/project"
 )
 
+const maxBlockoutRestoreSize = 32 * 1024 * 1024
+
 func projectRoutes(path string, files http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/project", func(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +37,14 @@ func projectRoutes(path string, files http.Handler) http.Handler {
 			return
 		}
 		updated, err := project.ApplySceneAction(path, r.PathValue("scene"), input)
+		writeSceneResult(w, updated, err, http.StatusOK)
+	})
+	mux.HandleFunc("PUT /api/project/scenes/{scene}/blockout", func(w http.ResponseWriter, r *http.Request) {
+		var input project.RestoreBlockoutInput
+		if !decodeLocalRequestWithLimit(w, r, &input, maxBlockoutRestoreSize) {
+			return
+		}
+		updated, err := project.RestoreBlockout(path, r.PathValue("scene"), input)
 		writeSceneResult(w, updated, err, http.StatusOK)
 	})
 	mux.HandleFunc("GET /assets/{name}", func(w http.ResponseWriter, r *http.Request) {

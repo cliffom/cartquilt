@@ -131,3 +131,267 @@ test("middle-drag pans over a card while header drag saves the card position", a
   await page.reload();
   await expect(card).toHaveCSS("left", updatedLayout);
 });
+
+test("paints, erases, and reopens a saved scene blockout", async ({ page, workspace }) => {
+  await openExample(page, workspace);
+  const card = page.getByLabel("World map canvas").getByRole("button", { name: "Willow Bank" });
+  await card.dblclick();
+  const canvas = page.getByLabel("Willow Bank scene canvas");
+  await page.getByRole("button", { name: "Blockout", exact: true }).click();
+  const tools = page.getByRole("region", { name: "Blockout tools" });
+  const saved = page.locator("#blockout-status");
+  const brush = tools.getByLabel("Brush");
+  const setup = tools.getByText("Setup", { exact: true });
+  await setup.click();
+  const movement = tools.getByLabel("Movement");
+  await movement.focus();
+  await movement.selectOption("platformer");
+  await expect(saved).toHaveText("Blockout saved.");
+  await expect(movement).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(tools.getByLabel("Movement")).toBeHidden();
+
+  await brush.selectOption("walkable");
+  await page.mouse.click(...(await tileCenter(canvas, 2, 2)));
+  const ground = canvas.locator('[data-terrain="walkable"]');
+  await expect(ground).toHaveCount(1);
+  await expect(ground).toHaveAttribute("style", /left: 10%;/);
+
+  await brush.selectOption("select");
+  await page.mouse.click(...(await tileCenter(canvas, 2, 2)));
+  await page.keyboard.down("Shift");
+  await page.mouse.click(...(await tileCenter(canvas, 3, 3)));
+  await page.keyboard.up("Shift");
+  await expect(tools.locator("#blockout-selection-info")).toHaveText(
+    "2×2 tiles · Walkable, Unpainted",
+  );
+
+  await brush.selectOption("blocked");
+  await page.mouse.move(...(await tileCenter(canvas, 5, 4)));
+  await page.mouse.down();
+  await page.mouse.move(...(await tileCenter(canvas, 7, 5)), { steps: 4 });
+  await page.mouse.up();
+  const wall = canvas.locator('[data-terrain="blocked"]');
+  await expect(wall).toHaveCount(1);
+  await expect(wall).toHaveAttribute("style", /width: 15%;/);
+
+  await brush.selectOption("player-spawn");
+  await tools.getByLabel("Label").fill("Courier start");
+  await page.mouse.click(...(await tileCenter(canvas, 5, 4)));
+  await expect(canvas.locator('[data-element="player-spawn"]')).toHaveCount(1);
+
+  await brush.selectOption("select");
+  await page.mouse.click(...(await tileCenter(canvas, 5, 4)));
+  await page.keyboard.down("Shift");
+  await page.mouse.click(...(await tileCenter(canvas, 7, 5)));
+  await page.keyboard.up("Shift");
+  await expect(canvas.locator(".scene-tile-selection")).toBeVisible();
+  await brush.selectOption("erase");
+  await tools.getByRole("button", { name: "Apply to selection" }).click();
+  await expect(wall).toHaveCount(0);
+  await expect(ground).toHaveCount(1);
+  await expect(canvas.locator('[data-element="player-spawn"]')).toHaveCount(1);
+
+  const undo = page.getByRole("button", { name: "Undo", exact: true });
+  const redo = page.getByRole("button", { name: "Redo", exact: true });
+  await undo.click();
+  await expect(wall).toHaveCount(1);
+  const snapshotURL = new URL("./api/project", page.url()).href;
+  const restored = await page.request.get(snapshotURL);
+  const scene = (await restored.json()).project.scenes.find((item) => item.id === "willow-bank");
+  expect(scene.blockout.terrain.some((region) => region.kind === "blocked")).toBe(true);
+  await redo.click();
+  await expect(wall).toHaveCount(0);
+  await expect(canvas.locator('[data-element="player-spawn"]')).toHaveCount(1);
+
+  await brush.selectOption("one-way");
+  await setup.click();
+  await tools.getByLabel("Tile X", { exact: true }).fill("10");
+  await tools.getByLabel("Tile Y", { exact: true }).fill("7");
+  await tools.getByLabel("Width in tiles").fill("4");
+  await tools.getByRole("button", { name: "Apply brush" }).click();
+  await expect(canvas.locator('[data-terrain="one-way"]')).toHaveAttribute("style", /width: 20%;/);
+  await page.keyboard.press("Escape");
+  let releaseStroke;
+  const heldStroke = new Promise((resolve) => {
+    releaseStroke = resolve;
+  });
+  await page.route(
+    "**/api/project/scenes/*/actions",
+    async (route) => {
+      await heldStroke;
+      await route.continue();
+    },
+    { times: 1 },
+  );
+  await brush.selectOption("water");
+  try {
+    await page.mouse.click(...(await tileCenter(canvas, 1, 10)));
+    await page.mouse.click(...(await tileCenter(canvas, 3, 10)));
+    await expect(page.locator("#status")).toHaveText("Saving blockout…");
+    expect(
+      await page.evaluate(() => {
+        const event = new Event("beforeunload", { cancelable: true });
+        return !window.dispatchEvent(event);
+      }),
+    ).toBe(true);
+    await page.locator("#project-menu summary").click();
+    await page.getByRole("button", { name: "Close project", exact: true }).click();
+    const close = page.getByRole("dialog", { name: "Close project?" });
+    await expect(close).toContainText("Unsaved edits in this tab will be discarded.");
+    await close.getByRole("button", { name: "Cancel" }).click();
+  } finally {
+    releaseStroke();
+  }
+  await expect(canvas.locator('[data-terrain="water"]')).toHaveCount(2);
+  await expect(page.locator("#status")).toHaveText("No unsaved scene edits");
+  await expect(undo).toBeEnabled();
+  await canvas.press("Control+z");
+  await expect(canvas.locator('[data-terrain="water"]')).toHaveCount(1);
+  await expect(redo).toBeEnabled();
+  await canvas.press("Control+Shift+z");
+  await expect(canvas.locator('[data-terrain="water"]')).toHaveCount(2);
+  await tools.getByLabel("Show layer").uncheck();
+  await expect(canvas.locator(".blockout-layer")).toHaveCount(0);
+  const inspectorLayer = page.getByLabel("Inspector").locator(".preview .blockout-layer");
+  await expect(inspectorLayer).toHaveCount(0);
+  await tools.getByLabel("Show layer").check();
+  await expect(ground).toBeVisible();
+  await expect(inspectorLayer).toBeVisible();
+
+  await page.reload();
+  await card.dblclick();
+  await expect(ground).toBeVisible();
+  await expect(wall).toHaveCount(0);
+  await expect(canvas.locator('[data-terrain="one-way"]')).toHaveCount(1);
+  await expect(canvas.locator('[data-element="player-spawn"]')).toHaveCount(1);
+  await page.getByRole("button", { name: "Blockout", exact: true }).click();
+  await setup.click();
+  await expect(tools.getByLabel("Movement")).toHaveValue("platformer");
+  await tools.getByText("Markers and guides", { exact: true }).click();
+  await expect(tools.getByLabel("Movement")).toBeHidden();
+  await expect(tools.getByText("Courier start · 5, 4")).toBeVisible();
+});
+
+test("reports a failed blockout save after opening another scene", async ({ page, workspace }) => {
+  await openExample(page, workspace);
+  const world = page.getByLabel("World map canvas");
+  const willow = world.getByRole("button", { name: "Willow Bank", exact: true });
+  const back = page.getByRole("button", { name: "← World map" });
+  await willow.dblclick();
+  const canvas = page.getByLabel("Willow Bank scene canvas");
+  await page.getByRole("button", { name: "Blockout", exact: true }).click();
+  await page.getByLabel("Brush").selectOption("walkable");
+
+  let releaseSave;
+  const held = new Promise((resolve) => {
+    releaseSave = resolve;
+  });
+  await page.route(
+    "**/api/project/scenes/willow-bank/actions",
+    async (route) => {
+      await held;
+      await route.fulfill({ status: 409, headers: { "Cartquilt-Conflict": "stale-revision" } });
+    },
+    { times: 1 },
+  );
+  try {
+    await page.mouse.click(...(await tileCenter(canvas, 2, 2)));
+    await expect(page.locator("#status")).toHaveText("Saving blockout…");
+    await back.click();
+    await world.getByRole("button", { name: "Loom Yard", exact: true }).dblclick();
+  } finally {
+    releaseSave();
+  }
+
+  const saveError = page
+    .getByRole("alert")
+    .filter({ hasText: "Could not save blockout for Willow Bank" });
+  await expect(saveError).toBeVisible();
+  await expect(saveError).toContainText("Reopen it to load the latest blockout.");
+  await expect(page.locator("#status")).toHaveText("Blockout save failed");
+  await back.click();
+  await willow.dblclick();
+  await expect(saveError).toBeVisible();
+  await expect(canvas.locator('[data-terrain="walkable"]')).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Blockout", exact: true }).click();
+  await page.getByLabel("Brush").selectOption("walkable");
+  await page.mouse.click(...(await tileCenter(canvas, 3, 3)));
+  const terrain = canvas.locator('[data-terrain="walkable"]');
+  await expect(terrain).toHaveCount(1);
+  await expect(terrain).toHaveAttribute("style", /left: 15%;/);
+  await expect(saveError).toBeVisible();
+  await expect(page.locator("#status")).toHaveText("Blockout save failed");
+  await page.getByRole("button", { name: "Dismiss blockout save warnings" }).click();
+  await expect(saveError).toBeHidden();
+  await expect(page.locator("#status")).toHaveText("No unsaved scene edits");
+  await expect(canvas).toBeFocused();
+});
+
+test("zooms and fits the scene while keeping blockout strokes aligned", async ({
+  page,
+  workspace,
+}) => {
+  await openExample(page, workspace);
+  const zoom = page.getByRole("group", { name: "Zoom controls" });
+  const percentage = zoom.locator("#percentage");
+  const fit = zoom.getByRole("button", { name: "Fit view" });
+  await expect(fit.locator("svg")).toBeVisible();
+  await expect(fit).toHaveText("");
+  await zoom.getByRole("button", { name: "Zoom in" }).click();
+  const worldZoom = await percentage.textContent();
+  const world = page.getByLabel("World map canvas");
+  await world.getByRole("button", { name: "Willow Bank", exact: true }).dblclick();
+  const canvas = page.getByLabel("Willow Bank scene canvas");
+  const art = canvas.locator(".art");
+  await page.getByRole("button", { name: "Blockout", exact: true }).click();
+  await page.getByLabel("Brush").selectOption("walkable");
+  await expect(percentage).toHaveText("100%");
+
+  const xTile = 8;
+  const yTile = 6;
+  const [x, y] = await tileCenter(canvas, xTile, yTile);
+  const before = await art.boundingBox();
+  if (!before) throw Error("Expected the fitted artwork to be visible");
+  await page.mouse.move(x, y);
+  await page.mouse.wheel(0, -240);
+  await expect(percentage).not.toHaveText("100%");
+  const zoomed = await art.boundingBox();
+  if (!zoomed) throw Error("Expected the zoomed artwork to be visible");
+  expect(zoomed.width).toBeGreaterThan(before.width);
+  const [zoomedX, zoomedY] = await tileCenter(canvas, xTile, yTile);
+  expect(Math.abs(zoomedX - x)).toBeLessThan(1);
+  expect(Math.abs(zoomedY - y)).toBeLessThan(1);
+
+  await page.mouse.click(x, y);
+  const paint = canvas.locator('[data-terrain="walkable"]');
+  await expect(paint).toHaveAttribute("style", /left: 40%;/);
+  await page.mouse.move(x, y);
+  await page.mouse.down({ button: "middle" });
+  await page.mouse.move(x + 36, y + 18, { steps: 4 });
+  await page.mouse.up({ button: "middle" });
+  const panned = await art.boundingBox();
+  if (!panned) throw Error("Expected the panned artwork to be visible");
+  expect(panned.x - zoomed.x).toBeCloseTo(36, 0);
+  expect(panned.y - zoomed.y).toBeCloseTo(18, 0);
+
+  await page.getByRole("button", { name: "← World map" }).click();
+  await expect(percentage).toHaveText(worldZoom);
+  await world.getByRole("button", { name: "Willow Bank", exact: true }).dblclick();
+  await expect(percentage).toHaveText("100%");
+  const fitted = await art.boundingBox();
+  const viewport = await canvas.boundingBox();
+  if (!fitted || !viewport) throw Error("Expected the artwork to fit within the canvas");
+  expect(fitted.x + fitted.width / 2).toBeCloseTo(viewport.x + viewport.width / 2, 0);
+  expect(fitted.y + fitted.height / 2).toBeCloseTo(viewport.y + viewport.height / 2, 0);
+
+  await canvas.press("=");
+  await expect(percentage).toHaveText("120%");
+  await fit.click();
+  await expect(percentage).toHaveText("100%");
+  await canvas.press("=");
+  await expect(percentage).toHaveText("120%");
+  await canvas.press("f");
+  await expect(percentage).toHaveText("100%");
+});

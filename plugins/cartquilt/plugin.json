@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "cartquilt",
   "version": "0.1.0",
-  "description": "Create local Game Boy Color projects for Cartquilt.",
+  "description": "Create local Game Boy Color projects and author editable scene blockouts in Cartquilt.",
   "repository": "https://github.com/cliffom/cartquilt",
   "extensions": {
     "com.openai": {
@@ -11,7 +11,7 @@
         "displayName": "Cartquilt",
         "composerIcon": "./assets/cartquilt-64.png",
         "logo": "./assets/cartquilt-64.png",
-        "defaultPrompt": ["Create a new Cartquilt project at a folder I choose."]
+        "defaultPrompt": ["Create a new Cartquilt project at a folder I choose.", "Plan a blockout for a scene in my Cartquilt project."]
       }
     }
   }

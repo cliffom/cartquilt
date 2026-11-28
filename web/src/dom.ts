@@ -1,3 +1,5 @@
+import type { TileArea } from "./grid-geometry.js";
+
 export const pointerButton = { primary: 0, middle: 1 } as const;
 export const pressedPointerButton = { primary: 1, middle: 4 } as const;
 const contextMenuViewportInsetPx = 8;
@@ -41,4 +43,15 @@ export function positionContextMenu(menu: HTMLElement, x: number, y: number) {
   menu.hidden = false;
   menu.style.left = `${Math.max(contextMenuViewportInsetPx, Math.min(x, innerWidth - menu.offsetWidth - contextMenuViewportInsetPx))}px`;
   menu.style.top = `${Math.max(contextMenuViewportInsetPx, Math.min(y, innerHeight - menu.offsetHeight - contextMenuViewportInsetPx))}px`;
+}
+
+export function positionTileArea(
+  node: HTMLElement,
+  area: TileArea,
+  scene: Pick<TileArea, "width" | "height">,
+) {
+  node.style.left = `${(area.x / scene.width) * 100}%`;
+  node.style.top = `${(area.y / scene.height) * 100}%`;
+  node.style.width = `${(area.width / scene.width) * 100}%`;
+  node.style.height = `${(area.height / scene.height) * 100}%`;
 }

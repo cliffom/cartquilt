@@ -1,4 +1,5 @@
 import "./editor.css";
+import { drawBlockout, setupBlockout } from "./blockout.js";
 import {
   connectionLabel,
   drawConnectionMarkers,
@@ -23,17 +24,21 @@ const recentProjectLimit = 8;
 const serviceHealthTimeoutMs = 3_000;
 const serviceHealthIntervalMs = 15_000;
 const httpStatus = { noContent: 204, notFound: 404 } as const;
-const worldMap = {
+const sceneCanvasHint = "Drag or Shift-click to select tiles · Right-click to add a connection";
+const brushCanvasHint = "Click or drag to apply the brush · Shift-click to select tiles";
+const viewport = {
   zoomStep: 1.2,
   minZoom: 0.1,
   maxZoom: 4,
-  minFitZoom: 0.01,
-  maxFitZoom: 1.25,
-  fitPaddingPx: 18,
   maxWheelDelta: 200,
   wheelZoomRate: 0.003,
   dragThresholdPx: 3,
   keyboardPanPx: 24,
+} as const;
+const worldMap = {
+  minFitZoom: 0.01,
+  maxFitZoom: 1.25,
+  fitPaddingPx: 18,
   keyboardSceneMovePx: 8,
 } as const;
 
@@ -483,6 +488,12 @@ async function start() {
     plane = get("plane"),
     details = get("details"),
     actions = get("actions");
+  const zoomOut = get<HTMLButtonElement>("zoom-out");
+  const zoomIn = get<HTMLButtonElement>("zoom-in");
+  const percentage = get("percentage");
+  zoomOut.onclick = () => zoom(1 / viewport.zoomStep);
+  zoomIn.onclick = () => zoom(viewport.zoomStep);
+  get("fit-view").onclick = fit;
   const filter = get<HTMLInputElement>("filter");
   const search = get<HTMLButtonElement>("search-scenes");
   const sceneGroup = get("scene-list-group");
@@ -515,7 +526,34 @@ async function start() {
     };
   });
   const queueWrite = createSceneWriteQueue();
-  const connections = setupConnections(w, queueWrite, canvas, render);
+  const connections = setupConnections(w, queueWrite, canvas, render, {
+    applyBrush: (scene, area) => blockout.applyBrush(scene, area),
+    selectionChanged: () => blockout.syncSelection(),
+  });
+  const blockout = setupBlockout(
+    w,
+    queueWrite,
+    canvas,
+    redrawBlockout,
+    connections.selectionFor,
+    () => {
+      if (connections.placement) {
+        connections.resetPlacement();
+        render();
+      }
+    },
+    () => {
+      updateSceneTools();
+      status();
+    },
+    (active) => {
+      if (!sceneMode() || connections.placement) return;
+      const hints = get("hints");
+      if (hints.textContent === sceneCanvasHint || hints.textContent === brushCanvasHint) {
+        hints.textContent = active ? brushCanvasHint : sceneCanvasHint;
+      }
+    },
+  );
   const sceneToolbar = get("scene-toolbar");
   const entranceTool = get<HTMLButtonElement>("place-entrance");
   const exitTool = get<HTMLButtonElement>("place-exit");
@@ -526,6 +564,7 @@ async function start() {
     ["exit", exitTool],
   ] as const) {
     tool.onclick = () => {
+      blockout.disarm();
       if (connections.placement === kind) {
         connections.resetPlacement();
         render();
@@ -539,9 +578,14 @@ async function start() {
     ["undo", undoTool, redoTool],
     ["redo", redoTool, undoTool],
   ] as const) {
-    tool.onclick = () => {
-      history(op);
-      if (tool.disabled) (alternate.disabled ? canvas : alternate).focus({ preventScroll: true });
+    tool.onclick = async () => {
+      const scene = w.selected;
+      await history(op);
+      if (!sceneMode() || w.selected !== scene) return;
+      if (document.activeElement !== tool && document.activeElement !== document.body) return;
+      (tool.disabled ? (alternate.disabled ? canvas : alternate) : tool).focus({
+        preventScroll: true,
+      });
     };
   }
   const newScene = setupSceneCreation(w, queueWrite, (id) => {
@@ -587,8 +631,7 @@ async function start() {
   }
   function open(id: string) {
     connections.resetPlacement();
-    w.selected = id;
-    w.desk = "scene";
+    w.openScene(id);
     closePanel(false);
     render();
     get("crumb").querySelector("button")?.focus();
@@ -630,6 +673,7 @@ async function start() {
     } else {
       art.classList.add("blank-art");
     }
+    drawBlockout(art, s, !sceneMode() || blockout.visible);
     for (const a of s.actors) {
       const sprite = interactive
         ? button("", () => selectActor(a.id, "canvas"), "sprite")
@@ -652,6 +696,17 @@ async function start() {
     );
     if (interactive) connections.attachGrid(art, s);
     return art;
+  }
+  function redrawBlockout(id: string) {
+    const scene = w.documents.get(id)?.scene;
+    if (!scene) return;
+    const visible = !sceneMode() || blockout.visible;
+    const art = plane.querySelector<HTMLElement>(`[data-grid-scene="${CSS.escape(id)}"]`);
+    if (art) drawBlockout(art, scene, visible);
+    if (w.selected === id) {
+      const preview = details.querySelector<HTMLElement>(".preview .art");
+      if (preview) drawBlockout(preview, scene, visible);
+    }
   }
   function navigator() {
     const scenes = get("scenes"),
@@ -750,33 +805,33 @@ async function start() {
     toggleSceneSearch();
   };
   function updateSceneTools() {
+    if (!sceneMode()) return;
     pressed(entranceTool, connections.placement === "entrance");
     pressed(exitTool, connections.placement === "exit");
-    undoTool.disabled = !w.active.canUndo;
-    redoTool.disabled = !w.active.canRedo;
+    undoTool.disabled = blockout.busy || !w.active.canUndo;
+    redoTool.disabled = blockout.busy || !w.active.canRedo;
   }
   function toolbar() {
     const crumb = get("crumb");
     crumb.replaceChildren();
-    actions.replaceChildren();
     sceneToolbar.hidden = !sceneMode();
-    actions.hidden = sceneMode();
+    const zoomHost = get(sceneMode() ? "workspace-feedback" : "toolbar");
+    if (actions.parentElement !== zoomHost) zoomHost.append(actions);
+    percentage.title = sceneMode() ? "Zoom relative to Fit" : "World map zoom";
     get("desk-title").textContent = sceneMode() ? w.active.scene.name : "World map";
     if (sceneMode()) {
       crumb.append(button("← World map", back));
       updateSceneTools();
     } else {
       crumb.textContent = "World desk";
-      const out = button("−", () => zoom(1 / worldMap.zoomStep)),
-        plus = button("+", () => zoom(worldMap.zoomStep));
-      out.setAttribute("aria-label", "Zoom out");
-      plus.setAttribute("aria-label", "Zoom in");
-      const percentage = el("span");
-      percentage.id = "percentage";
-      actions.append(out, percentage, plus, button("Fit", fit));
     }
   }
-  function history(op: "undo" | "redo") {
+  async function history(op: "undo" | "redo") {
+    if (blockout.busy || !sceneMode()) return;
+    if (w.active.hasBlockoutHistory(op)) {
+      await blockout.history(op);
+      return;
+    }
     w.active[op]();
     toolbar();
     draw();
@@ -951,9 +1006,14 @@ async function start() {
 
   function status() {
     const drafts = [...w.documents.values()].filter((d) => d.dirty).map((d) => d.scene.name);
+    const hasUnsavedEdits = !!drafts.length || w.layoutDirty || blockout.busy;
     let message = drafts.length
       ? `Unsaved in this tab · ${drafts.join(", ")}`
-      : "No unsaved scene edits";
+      : blockout.busy
+        ? "Saving blockout…"
+        : blockout.saveFailed
+          ? "Blockout save failed"
+          : "No unsaved scene edits";
     if (sceneMode() && drafts.length && !w.active.dirty)
       message = `${w.active.scene.name} is clean · ${message}`;
     if (layoutError && w.layoutDirty) message += ` · ${layoutError}`;
@@ -963,19 +1023,20 @@ async function start() {
     get("location").textContent =
       `${project.name} / ${sceneMode() ? w.active.scene.name : "World map"}`;
     if (get("status").textContent !== message) get("status").textContent = message;
-    get("status").classList.toggle("dirty", !!drafts.length || w.layoutDirty);
-    window.onbeforeunload =
-      drafts.length || w.layoutDirty
-        ? (e) => {
-            e.preventDefault();
-            e.returnValue = "";
-          }
-        : null;
+    get("status").classList.toggle("dirty", hasUnsavedEdits);
+    window.onbeforeunload = hasUnsavedEdits
+      ? (e) => {
+          e.preventDefault();
+          e.returnValue = "";
+        }
+      : null;
   }
   function positionCamera() {
-    const c = w.camera;
+    const c = w.viewportCamera;
     plane.style.transform = `translate(${c.x}px,${c.y}px) scale(${c.zoom})`;
-    get("percentage").textContent = `${Math.round(c.zoom * 100)}%`;
+    percentage.textContent = `${Math.round(c.zoom * 100)}%`;
+    zoomOut.disabled = c.zoom <= viewport.minZoom;
+    zoomIn.disabled = c.zoom >= viewport.maxZoom;
   }
   function positionCards() {
     if (sceneMode()) return;
@@ -988,14 +1049,23 @@ async function start() {
     positionWorldConnections(plane, w);
   }
   function zoom(factor: number, x = canvas.clientWidth / 2, y = canvas.clientHeight / 2) {
-    const c = w.camera,
-      next = Math.min(worldMap.maxZoom, Math.max(worldMap.minZoom, c.zoom * factor));
+    const c = w.viewportCamera;
+    const next = Math.min(viewport.maxZoom, Math.max(viewport.minZoom, c.zoom * factor));
+    if (sceneMode()) {
+      x -= canvas.clientWidth / 2;
+      y -= canvas.clientHeight / 2;
+    }
     c.x = x - ((x - c.x) * next) / c.zoom;
     c.y = y - ((y - c.y) * next) / c.zoom;
     c.zoom = next;
     positionCamera();
   }
   function fit() {
+    if (sceneMode()) {
+      w.resetSceneCamera();
+      positionCamera();
+      return;
+    }
     const bounds = Array.from(plane.querySelectorAll<HTMLElement>(".card"), (card) => {
       const p = w.positionFor(card.dataset.id);
       return { ...p, right: p.x + card.offsetWidth, bottom: p.y + card.offsetHeight };
@@ -1021,12 +1091,12 @@ async function start() {
     positionCamera();
   }
   function draw() {
-    finishWorldDrag(true);
+    finishCanvasDrag(true);
     plane.replaceChildren();
     if (sceneMode()) {
-      plane.style.transform = "";
       plane.style.setProperty("--ratio", String(w.active.scene.width / w.active.scene.height));
       plane.append(artwork(w.active.scene, true));
+      positionCamera();
       return;
     }
     const groups = new Map<string, ReturnType<typeof sceneConnections>>();
@@ -1123,10 +1193,11 @@ async function start() {
       sceneMode() ? `${w.active.scene.name} scene canvas` : "World map canvas",
     );
     get("hints").textContent = sceneMode()
-      ? "Drag or Shift-click to select tiles · Right-click to add a connection"
+      ? sceneCanvasHint
       : "Drag a scene header to move it · Double-click to open · Drag or Shift-click tiles to select";
     if (!w.snapshot.project.scenes.length)
       get("hints").textContent = "This world has no scenes yet";
+    blockout.sync();
     toolbar();
     draw();
     navigator();
@@ -1143,7 +1214,7 @@ async function start() {
     moved: boolean;
   };
   let drag: Drag | undefined;
-  function finishWorldDrag(cancel = false) {
+  function finishCanvasDrag(cancel = false) {
     if (!drag) return;
     const { pointer, owner, card, origin, moved } = drag;
     drag = undefined;
@@ -1160,7 +1231,7 @@ async function start() {
   }
   canvas.onpointerdown = (e) => {
     const middlePan = e.pointerType === "mouse" && e.button === pointerButton.middle;
-    if (sceneMode() || drag || (e.button !== pointerButton.primary && !middlePan)) return;
+    if (drag || (!middlePan && (sceneMode() || e.button !== pointerButton.primary))) return;
     const target = e.target as Element;
     if (!middlePan && target.closest(".world-connection")) return;
     const card = middlePan ? null : target.closest<HTMLElement>(".card");
@@ -1171,7 +1242,7 @@ async function start() {
       buttons: middlePan ? pressedPointerButton.middle : pressedPointerButton.primary,
       owner: card ?? canvas,
       start: { x: e.clientX, y: e.clientY },
-      origin: { ...(id ? w.positionFor(id) : w.camera) },
+      origin: { ...(id ? w.positionFor(id) : w.viewportCamera) },
       card: id,
       moved: false,
     };
@@ -1184,12 +1255,12 @@ async function start() {
   canvas.onpointermove = (e) => {
     if (!drag || e.pointerId !== drag.pointer) return;
     if ((e.buttons & drag.buttons) === 0) {
-      finishWorldDrag();
+      finishCanvasDrag();
       return;
     }
     const dx = e.clientX - drag.start.x,
       dy = e.clientY - drag.start.y;
-    if (!drag.moved && Math.hypot(dx, dy) < worldMap.dragThresholdPx) return;
+    if (!drag.moved && Math.hypot(dx, dy) < viewport.dragThresholdPx) return;
     if (!drag.moved && drag.card) selectScene(drag.card);
     drag.moved = true;
     if (drag.card) {
@@ -1200,32 +1271,33 @@ async function start() {
       positionCards();
       status();
     } else {
-      w.camera.x = drag.origin.x + dx;
-      w.camera.y = drag.origin.y + dy;
+      const camera = w.viewportCamera;
+      camera.x = drag.origin.x + dx;
+      camera.y = drag.origin.y + dy;
       positionCamera();
     }
   };
   canvas.onpointerup = (event) => {
-    if (drag?.pointer === event.pointerId) finishWorldDrag();
+    if (drag?.pointer === event.pointerId) finishCanvasDrag();
   };
   for (const type of ["pointercancel", "lostpointercapture"] as const) {
     canvas.addEventListener(type, (event) => {
-      if (drag?.pointer === event.pointerId && drag.owner === event.target) finishWorldDrag(true);
+      if (drag?.pointer === event.pointerId && drag.owner === event.target) finishCanvasDrag(true);
     });
   }
   canvas.addEventListener("auxclick", (event) => {
-    if (!sceneMode() && event.button === pointerButton.middle) event.preventDefault();
+    if (event.button === pointerButton.middle) event.preventDefault();
   });
   canvas.addEventListener(
     "wheel",
     (e) => {
-      if (sceneMode()) return;
       e.preventDefault();
+      if (drag) return;
       const r = canvas.getBoundingClientRect();
       zoom(
         Math.exp(
-          -Math.max(-worldMap.maxWheelDelta, Math.min(worldMap.maxWheelDelta, e.deltaY)) *
-            worldMap.wheelZoomRate,
+          -Math.max(-viewport.maxWheelDelta, Math.min(viewport.maxWheelDelta, e.deltaY)) *
+            viewport.wheelZoomRate,
         ),
         e.clientX - r.left,
         e.clientY - r.top,
@@ -1234,7 +1306,7 @@ async function start() {
     { passive: false },
   );
   canvas.onkeydown = (e) => {
-    if (sceneMode()) return;
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
     const card = (e.target as Element).closest<HTMLElement>(".card")?.dataset.id;
     if (e.key === "Enter" && card) {
       e.preventDefault();
@@ -1247,7 +1319,7 @@ async function start() {
       ArrowUp: { x: 0, y: -1 },
       ArrowDown: { x: 0, y: 1 },
     };
-    if (e.key in step) {
+    if (Object.hasOwn(step, e.key)) {
       e.preventDefault();
       const d = step[e.key];
       if (card && e.shiftKey) {
@@ -1257,13 +1329,14 @@ async function start() {
         selectScene(card);
         savePosition(card);
       } else {
-        w.camera.x += worldMap.keyboardPanPx * d.x;
-        w.camera.y += worldMap.keyboardPanPx * d.y;
+        const camera = w.viewportCamera;
+        camera.x += viewport.keyboardPanPx * d.x;
+        camera.y += viewport.keyboardPanPx * d.y;
+        positionCamera();
       }
-      positionCards();
     } else if (["+", "=", "-"].includes(e.key)) {
       e.preventDefault();
-      zoom(e.key === "-" ? 1 / worldMap.zoomStep : worldMap.zoomStep);
+      zoom(e.key === "-" ? 1 / viewport.zoomStep : viewport.zoomStep);
     } else if (e.key.toLowerCase() === "f") fit();
   };
   document.addEventListener("keydown", (e) => {
@@ -1281,9 +1354,14 @@ async function start() {
       closePanel();
       return;
     }
-    if (sceneMode() && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+    const key = e.key.toLowerCase();
+    const typingBlockout =
+      e.target instanceof HTMLInputElement && e.target.closest("#blockout-tools");
+    const historyShortcut =
+      (key === "z" && (e.ctrlKey || e.metaKey)) || (key === "y" && e.ctrlKey && !e.metaKey);
+    if (sceneMode() && !typingBlockout && historyShortcut) {
       e.preventDefault();
-      history(e.shiftKey ? "redo" : "undo");
+      void history(key === "y" || e.shiftKey ? "redo" : "undo");
     }
   });
   for (const id of ["project-divider", "project", "project-menu", "editor-desk", "editor-footer"])
